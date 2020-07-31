@@ -7,8 +7,8 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/bmatsuo/lmdb-go/int/lmdbtest"
-	"github.com/bmatsuo/lmdb-go/lmdb"
+	"github.com/glycerine/lmdb-go/int/lmdbtest"
+	"github.com/glycerine/lmdb-go/lmdb"
 )
 
 type testHandler struct {

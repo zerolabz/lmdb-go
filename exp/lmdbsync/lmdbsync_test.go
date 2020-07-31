@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bmatsuo/lmdb-go/int/lmdbtest"
-	"github.com/bmatsuo/lmdb-go/lmdb"
+	"github.com/glycerine/lmdb-go/int/lmdbtest"
+	"github.com/glycerine/lmdb-go/lmdb"
 )
 
 var optNoLock = &lmdbtest.EnvOptions{Flags: lmdb.NoLock}
