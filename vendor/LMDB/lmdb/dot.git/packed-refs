@@ -1,0 +1,21 @@
+# pack-refs with: peeled fully-peeled 
+a7fc32c0b39c29f9afd2172338060b079d549c59 refs/remotes/origin/incre
+e8760b474d3a2a4ae78dd7dc7a17698ac5425575 refs/remotes/origin/mdb.RE/0.9
+9d75a82ae10fdcee80b8b8e82c6ef9b6ab83dc47 refs/remotes/origin/mdb.master
+59b945c06e91bd0295a55cc000bffccc39fbe211 refs/remotes/origin/robust
+8716451d14e01613464a3aff56bcf1d051b8d3ed refs/remotes/origin/vl32
+3a48620f371aa1c22167aa6bba655e18023ef85b refs/remotes/origin/vl32b
+f39bceb800dd1b1b4b05cfb45a3ddde94a273fff refs/tags/LMDB_0.9.10
+aa3463ec7c5e979420b13c8f37caa377ed2c1cf1 refs/tags/LMDB_0.9.11
+52406746bd08639bcbd9fb70c2f56b830655a775 refs/tags/LMDB_0.9.12
+59d30a49c3ad403235ba30f65e074eddf1c125f0 refs/tags/LMDB_0.9.13
+2f587ae081d076e3707360c5db086520c219d3ea refs/tags/LMDB_0.9.14
+56e4e20ebca0ae6459c479de66cd174c10d2d4c6 refs/tags/LMDB_0.9.15
+5d67c6aed16366ddcfac77eb6a166928a257ab7b refs/tags/LMDB_0.9.16
+2011eb37c1a3d390df2336cb2c55843771723a0c refs/tags/LMDB_0.9.17
+6dab37f2acaef70a31f65bd485fd2222c2648d2b refs/tags/LMDB_0.9.6
+214e9ed07d566307f22e16d0c1f1f57be9504a3b refs/tags/LMDB_0.9.7
+0f842a271085c198eb1df1ce3e177122c7a3c6ae refs/tags/LMDB_0.9.8
+7449ca604ca732ad262cfd77da403968cdb9157f refs/tags/LMDB_0.9.9
+353c1947e7af84eacc83743cd1911b6a34cbdc11 refs/tags/master.old
+^30736a0ff5baf9159e02a0562ac7bd31ea128c3d
