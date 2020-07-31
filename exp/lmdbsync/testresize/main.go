@@ -26,7 +26,7 @@ import (
 	"os"
 	"time"
 
-	"golang.org/x/net/context"
+	"context"
 
 	"github.com/glycerine/lmdb-go/exp/lmdbsync"
 	"github.com/glycerine/lmdb-go/lmdb"
