@@ -5,8 +5,8 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/bmatsuo/lmdb-go/int/lmdbtest"
-	"github.com/bmatsuo/lmdb-go/lmdb"
+	"github.com/glycerine/lmdb-go/int/lmdbtest"
+	"github.com/glycerine/lmdb-go/lmdb"
 )
 
 type errcheck func(err error) (ok bool)
