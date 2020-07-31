@@ -1,0 +1,13 @@
+[core]
+	repositoryformatversion = 0
+	filemode = true
+	bare = false
+	logallrefupdates = true
+	ignorecase = true
+	precomposeunicode = true
+[remote "origin"]
+	url = https://github.com/LMDB/lmdb
+	fetch = +refs/heads/*:refs/remotes/origin/*
+[branch "mdb.master"]
+	remote = origin
+	merge = refs/heads/mdb.master
