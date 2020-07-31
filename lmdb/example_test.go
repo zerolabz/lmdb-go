@@ -75,6 +75,7 @@ func Example() {
 	// database may need to be created, we need to get the database handle in
 	// an update transacation.
 	var dbi lmdb.DBI
+	_ = dbi
 	err = env.Update(func(txn *lmdb.Txn) (err error) {
 		dbi, err = txn.CreateDBI("example")
 		return err
@@ -344,6 +345,7 @@ func ExampleEnv() {
 		// outside the transaction via closure and can be use after the
 		// transaction is committed.
 		dbi, err = txn.OpenDBI("exampledb", lmdb.Create)
+		_ = dbi
 		if err != nil {
 			return err
 		}
@@ -667,6 +669,7 @@ func ExampleTxn_OpenDBI() {
 	// DBI handles can be saved after their opening transaction has committed
 	// and may be reused as long as the environment remains open.
 	var dbi lmdb.DBI
+	_ = dbi
 	err = env.Update(func(txn *lmdb.Txn) (err error) {
 		dbi, err = txn.OpenDBI("dbfound", 0)
 		return err
@@ -682,6 +685,7 @@ func ExampleTxn_OpenDBI() {
 // data written by Txn./Cursor.Put().
 func ExampleTxn_OpenDBI_create() {
 	var dbi lmdb.DBI
+	_ = dbi
 	err = env.Update(func(txn *lmdb.Txn) (err error) {
 		dbi, err = txn.OpenDBI("dbnew", lmdb.Create)
 		return err
@@ -697,6 +701,7 @@ func ExampleTxn_OpenDBI_create() {
 // IsNotFound() will test an error for this condition.
 func ExampleTxn_OpenDBI_notFound() {
 	var dbi lmdb.DBI
+	_ = dbi
 	err = env.Update(func(txn *lmdb.Txn) (err error) {
 		dbi, err = txn.OpenDBI("dbnotfound", 0)
 		return err
@@ -711,6 +716,7 @@ func ExampleTxn_OpenDBI_notFound() {
 // case then the function IsError() can test an error for this condition.
 func ExampleTxn_OpenDBI_dBsFull() {
 	var dbi lmdb.DBI
+	_ = dbi
 	err = env.Update(func(txn *lmdb.Txn) (err error) {
 		dbi, err = txn.OpenDBI("dbnotexist", 0)
 		return err
@@ -723,6 +729,7 @@ func ExampleTxn_OpenDBI_dBsFull() {
 // Txn.OpenRoot, unlike Txn.OpenDBI, will never produce the error DBsFull.
 func ExampleTxn_OpenRoot() {
 	var dbi lmdb.DBI
+	_ = dbi
 	err = env.Update(func(txn *lmdb.Txn) (err error) {
 		dbi, err = txn.OpenRoot(0)
 		return err
@@ -738,6 +745,7 @@ func ExampleTxn_OpenRoot() {
 func ExampleTxn_OpenRoot_view() {
 	err = env.View(func(txn *lmdb.Txn) (err error) {
 		dbi, err := txn.OpenRoot(0)
+		_ = dbi
 		if err != nil {
 			return err
 		}
@@ -773,7 +781,9 @@ func ExampleTxn_Get() {
 	// variables to hold data extracted from the database
 	var point struct{ X, Y int }
 	var str string
+	_ = str
 	var p1, p2 []byte
+	_ = p2
 
 	// extract data from an example environment/database.  it is critical for application
 	// code to handle errors  but that is omitted here to save space.
