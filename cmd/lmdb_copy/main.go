@@ -14,7 +14,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/bmatsuo/lmdb-go/internal/lmdbcmd"
+	"github.com/bmatsuo/lmdb-go/int/lmdbcmd"
 	"github.com/bmatsuo/lmdb-go/lmdb"
 )
 
