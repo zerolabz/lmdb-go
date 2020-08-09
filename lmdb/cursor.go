@@ -171,6 +171,9 @@ func (c *Cursor) Get(setkey, setval []byte, op uint) (key, val []byte, err error
 			key = p
 		}
 	} else {
+		if c.txn.key == nil {
+			panic("huh? why is c.txn.key nil?")
+		}
 		key = c.txn.bytes(c.txn.key)
 	}
 	val = c.txn.bytes(c.txn.val)
