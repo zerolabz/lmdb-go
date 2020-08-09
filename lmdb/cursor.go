@@ -190,7 +190,8 @@ func (c *Cursor) Get(setkey, setval []byte, op uint) (key, val []byte, err error
 func (c *Cursor) getVal0(op uint) error {
 	key := c.txn.key
 	val := c.txn.val
-	ret := C.mdb_cursor_get(c._c, key, val, C.MDB_cursor_op(op))
+	cur := c._c
+	ret := C.mdb_cursor_get(cur, key, val, C.MDB_cursor_op(op))
 	return operrno("mdb_cursor_get", ret)
 }
 
@@ -201,8 +202,9 @@ func (c *Cursor) getVal0(op uint) error {
 func (c *Cursor) getVal1(setkey []byte, op uint) error {
 	key := c.txn.key
 	val := c.txn.val
+	cur := c._c
 	ret := C.lmdbgo_mdb_cursor_get1(
-		c._c,
+		cur,
 		(*C.char)(unsafe.Pointer(&setkey[0])), C.size_t(len(setkey)),
 		key, val,
 		C.MDB_cursor_op(op),
@@ -217,8 +219,9 @@ func (c *Cursor) getVal1(setkey []byte, op uint) error {
 func (c *Cursor) getVal2(setkey, setval []byte, op uint) error {
 	key := c.txn.key
 	val := c.txn.val
+	cur := c._c
 	ret := C.lmdbgo_mdb_cursor_get2(
-		c._c,
+		cur,
 		(*C.char)(unsafe.Pointer(&setkey[0])), C.size_t(len(setkey)),
 		(*C.char)(unsafe.Pointer(&setval[0])), C.size_t(len(setval)),
 		key, val,
