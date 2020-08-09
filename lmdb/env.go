@@ -68,6 +68,7 @@ type Env struct {
 	// been closed, so that it may know if it must abort.
 	closeLock sync.RWMutex
 
+	// for writers
 	ckey *C.MDB_val
 	cval *C.MDB_val
 }

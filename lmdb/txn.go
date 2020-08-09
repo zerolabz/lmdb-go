@@ -86,8 +86,15 @@ func beginTxn(env *Env, parent *Txn, flags uint) (*Txn, error) {
 			// there is a synchronized pool involved, which will increase
 			// overhead.  Further, allocating these values with C will add
 			// overhead both here and when the values are freed.
-			txn.key = new(C.MDB_val)
-			txn.val = new(C.MDB_val)
+
+			// problem is, this induces panics from cgo in go1.14:
+			//   panic: runtime error: cgo argument has Go pointer to Go pointer
+			// so don't allocate these in Go like this:
+			//   txn.key = new(C.MDB_val)
+			//   txn.val = new(C.MDB_val)
+			// instead, allocate them from C:
+			txn.key = (*C.MDB_val)(C.malloc(C.size_t(unsafe.Sizeof(C.MDB_val{}))))
+			txn.val = (*C.MDB_val)(C.malloc(C.size_t(unsafe.Sizeof(C.MDB_val{}))))
 		}
 	} else {
 		// Because parent Txn objects cannot be used while a sub-Txn is active
@@ -228,6 +235,13 @@ func (txn *Txn) clearTxn() {
 	// Clear the C object to prevent any potential future use of the freed
 	// pointer.
 	txn._txn = nil
+
+	// release malloced memory here, since both Abort and Commit
+	// call clearTxn.
+	if txn.readonly {
+		C.free(unsafe.Pointer(txn.key))
+		C.free(unsafe.Pointer(txn.val))
+	}
 
 	// Clear txn.id because it no longer matches the value of txn._txn (and
 	// future calls to txn.ID() should not see the stale id).  Instead of
