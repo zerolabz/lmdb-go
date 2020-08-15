@@ -1146,7 +1146,7 @@ func TestSphinx(t *testing.T) {
 	}
 
 	for {
-		committed, err := env.SphynxReader(func(txn *Txn, readslot int) (commit bool, err error) {
+		err := env.SphynxReader(func(txn *Txn, readslot int) (err error) {
 			panicOn(err)
 			vv("new Sphynx has readslot %v has made a new txn", readslot)
 
@@ -1173,7 +1173,7 @@ func TestSphinx(t *testing.T) {
 				}
 				_, _ = k, v
 				//if i%1e4 == 0 {
-				vv("reader %v at i=%v  sees key:'%v' -> val:'%v'", readno, i, string(k), string(v))
+				vv("reader %v at i=%v  sees key:'%v' -> val:'%v'", readslot, i, string(k), string(v))
 				//}
 
 				pause := rand.Intn(500)
@@ -1181,9 +1181,10 @@ func TestSphinx(t *testing.T) {
 			}
 			cur.Close()
 			txn.Abort()
+			return nil
 		})
 
-		vv("SphynxReader returned committed = '%v' and err='%v'", committed, err)
+		vv("SphynxReader returned err='%v'", err)
 	} // endless for
 
 	select {}

@@ -70,6 +70,10 @@ type Txn struct {
 // beginTxn does not lock the OS thread which is a prerequisite for creating a
 // write transaction.
 func beginTxn(env *Env, parent *Txn, flags uint) (*Txn, error) {
+	return beginTxnWithReadSlot(env, parent, flags, nil)
+}
+
+func beginTxnWithReadSlot(env *Env, parent *Txn, flags uint, rs *ReadSlot) (*Txn, error) {
 	txn := &Txn{
 		readonly: (flags&Readonly != 0),
 		env:      env,
@@ -83,10 +87,13 @@ func beginTxn(env *Env, parent *Txn, flags uint) (*Txn, error) {
 			txn.skey = env.wkey
 			txn.sval = env.wval
 		} else {
-			err := env.GetOrWaitForReadSlot(&txn.ReadSlot)
-			if err != nil {
-				// times out if no progress in 5 seconds
-				return nil, err
+			if rs != nil {
+				txn.ReadSlot = *rs
+			} else {
+				err := env.GetOrWaitForReadSlot(&txn.ReadSlot)
+				if err != nil {
+					return nil, err
+				}
 			}
 		}
 	} else {

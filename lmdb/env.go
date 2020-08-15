@@ -14,6 +14,8 @@ import (
 	"runtime"
 	"sync"
 	"unsafe"
+
+	"github.com/glycerine/idem"
 )
 
 // success is a value returned from the LMDB API to indicate a successful call.
@@ -86,6 +88,8 @@ type Env struct {
 	// to avoid a C.malloc() allocation on each read.
 	rkey []*C.MDB_val
 	rval []*C.MDB_val
+
+	readWorker []*sphynxReadWorker // size will be maxReaders
 }
 
 type ReadSlot struct {
@@ -150,11 +154,15 @@ func NewEnvMaxReaders(maxReaders int) (*Env, error) {
 		rval:       make([]*C.MDB_val, maxReaders),
 		rkeyAvail:  make([]int, maxReaders, maxReaders),
 		maxReaders: maxReaders,
+		readWorker: make([]*sphynxReadWorker, maxReaders),
 	}
 	for i := 0; i < maxReaders; i++ {
 		env.rkey[i] = (*C.MDB_val)(C.malloc(C.size_t(unsafe.Sizeof(C.MDB_val{}))))
 		env.rval[i] = (*C.MDB_val)(C.malloc(C.size_t(unsafe.Sizeof(C.MDB_val{}))))
 		env.rkeyAvail[i] = i
+
+		// start maxReaders goroutines.
+		env.readWorker[i] = newSphynxReadWorker()
 	}
 	env.rkeyCond = sync.NewCond(&env.rkeyMu)
 
@@ -512,6 +520,14 @@ func (env *Env) BeginTxn(parent *Txn, flags uint) (*Txn, error) {
 	return txn, err
 }
 
+func (env *Env) BeginTxnWithReadSlot(parent *Txn, flags uint, rs *ReadSlot) (*Txn, error) {
+	txn, err := beginTxnWithReadSlot(env, parent, flags, rs)
+	if txn != nil {
+		runtime.SetFinalizer(txn, func(v interface{}) { v.(*Txn).finalize() })
+	}
+	return txn, err
+}
+
 func (env *Env) NewReadTxn() (*Txn, error) {
 	return env.BeginTxn(nil, Readonly)
 }
@@ -630,17 +646,68 @@ func (env *Env) CloseDBI(db DBI) {
 type SphynxReadFunc func(txn *Txn, readslot int) (err error)
 
 type sphynxReadJob struct {
-	f    SphynxReadFunc
-	done chan struct{}
-	err  error
+	txn      *Txn
+	f        SphynxReadFunc
+	done     chan struct{}
+	err      error
+	flags    uint
+	readSlot ReadSlot
+}
+
+func newSphyxReadJob(f SphynxReadFunc, txn *Txn) (j *sphynxReadJob) {
+	j = &sphynxReadJob{
+		txn:   txn,
+		f:     f,
+		flags: Readonly,
+		done:  make(chan struct{}),
+	}
+	return
 }
 
 func (env *Env) SphynxReader(sphynxRF SphynxReadFunc) (err error) {
-	txn, err := env.NewRawReadTxn()
-	panicOn(err)
 	job := newSphynxJob(sphynxRF)
-	env.readWorkCh[txn.ReadSlot] <- job
+
+	// block until we can get a read slot
+	err = env.GetOrWaitForReadSlot(&job.readSlot)
+	panicOn(err)
+
+	env.readWorker[job.readSlot.slot].jobsCh <- job
 	<-job.done
-	txn.Abort()
 	return job.err
+}
+
+type sphynxReadWorker struct {
+	jobsCh chan *sphynxReadJob
+	halt   *idem.Halter
+}
+
+func newSphynxReadWorker() *sphynxReadWorker {
+	w := &sphynxReadWorker{
+		jobsCh: make(chan *sphynxReadJob),
+		halt:   idem.NewHalter(),
+	}
+	go func() {
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
+
+		defer w.halt.Done.Close()
+		for {
+			select {
+			case <-w.halt.ReqStop.Chan:
+				return
+			case job := <-w.jobsCh:
+				txn, err := env.BeginTxnWithReadSlot(nil, job.flags, &job.readSlot)
+				panicOn(err)
+
+				// run the read-only txn code on this safely locked
+				// to thread goroutine that allocated the txn.
+				job.err = job.f(txn, txn.slot)
+
+				// have to do this while still on this goroutine.
+				job.txn.Abort() // cleanup reader
+				close(job.done)
+			}
+		}
+	}()
+	return w
 }
