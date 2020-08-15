@@ -131,6 +131,33 @@ details about dealing with such situations.
 package lmdb
 
 /*
+ Explanation of the added gcc build flags:
+
+   without -Wno-stringop-overflow, gcc10.1.0 gives these (a) warnings. However
+   with    -Wno-stringop-overflow, clang 9.1.0 on OSX gives (b) warnings.
+   Sigh. So we add them both to get a quiet, cross-platform build.
+
+(a) linux gcc10.1.0:
+mdb.c: In function ‘mdb_env_cwalk’:
+mdb.c:9235:7: warning: writing 8 bytes into a region of size 1 [-Wstringop-overflow=]
+ 9235 |       memcpy(NODEDATA(ni), &my->mc_next_pgno, sizeof(pgno_t));
+      |       ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+mdb.c:919:8: note: at offset 0 to object ‘mn_data’ with size 1 declared here
+  919 |  char  mn_data[1];   // < key and data are appended here
+|        ^~~~~~~
+mdb.c: In function ‘mdb_node_add’:
+mdb.c:7386:4: warning: writing 8 bytes into a region of size 1 [-Wstringop-overflow=]
+7386 |    memcpy(ndata, &ofp->mp_pgno, sizeof(pgno_t));
+|    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+mdb.c:7380:5: warning: writing 8 bytes into a region of size 1 [-Wstringop-overflow=]
+7380 |     memcpy(ndata, data->mv_data, sizeof(pgno_t));
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+(b) darwin "gcc" which is really clang 9.1.0:
+warning: unknown warning option '-Wno-stringop-overflow'; did you mean '-Wno-shift-overflow'? [-Wunknown-warning-option]
+*/
+
+/*
 #cgo CFLAGS: -pthread -W -Wall -Wno-unused-parameter -Wno-format-extra-args -Wbad-function-cast -Wno-missing-field-initializers -Wno-stringop-overflow -Wno-unknown-warning-option -O2 -g
 #cgo linux,pwritev CFLAGS: -DMDB_USE_PWRITEV
 

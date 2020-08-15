@@ -893,6 +893,9 @@ func BenchmarkCursor_Renew(b *testing.B) {
 }
 
 func TestConcurrentReadingAndWriting(t *testing.T) {
+	if !testing.Short() {
+		t.Skip("ironically skipping an infinitely running test when not in short mode")
+	}
 
 	rand.Seed(1)
 	maxr := 9
@@ -1076,6 +1079,9 @@ func TestConcurrentReadingAndWriting(t *testing.T) {
 // lion(txn) + eagle(goroutine) = sphynx
 // the riddle will be revealed shortly.
 func TestSphynx(t *testing.T) {
+	if !testing.Short() {
+		t.Skip("ironically skipping an infinitely running test when not in short mode")
+	}
 
 	rand.Seed(1)
 	maxr := 7
@@ -1245,7 +1251,9 @@ func TestSphynx(t *testing.T) {
 
 // totally separate Env for each file, does it work?
 func TestTwoDatabaseFilesOpenAtOnce(t *testing.T) {
-
+	if !testing.Short() {
+		t.Skip("ironically skipping an infinitely running test when not in short mode")
+	}
 	openDB := func(path string) (*Env, error) {
 		runtime.LockOSThread()
 		defer runtime.UnlockOSThread()

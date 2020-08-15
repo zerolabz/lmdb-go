@@ -9,6 +9,7 @@ package lmdb
 import "C"
 
 import (
+	"fmt"
 	"log"
 	"runtime"
 	"unsafe"
@@ -74,6 +75,8 @@ func beginTxn(env *Env, parent *Txn, flags uint) (*Txn, error) {
 	return beginTxnWithReadSlot(env, parent, flags, nil)
 }
 
+var ErrViewCannotHaveWriteChild = fmt.Errorf("cannot have child writer txn from read-only parent txn")
+
 func beginTxnWithReadSlot(env *Env, parent *Txn, flags uint, rs *ReadSlot) (txn *Txn, err error) {
 	write := (flags&Readonly == 0)
 	txn = &Txn{
@@ -84,19 +87,24 @@ func beginTxnWithReadSlot(env *Env, parent *Txn, flags uint, rs *ReadSlot) (txn 
 	var ptxn *C.MDB_txn
 	if write {
 		if rs != nil {
-			panic("do not reserver a ReadSlot for write txn!")
+			panic("do not reserve a ReadSlot for write txn!")
 		}
 		if parent != nil && parent.readonly {
-			panic("cannot have child writer of read-only parent")
+			//TestTxn_View_noSubTxn tests for this, so don't panic
+			// even though that is sane, b/c it messes with the tests.
+			// Just return an error.
+			return nil, ErrViewCannotHaveWriteChild
 		}
 		// use the one writeSlot, unless we are using parent's slot.
 		if parent == nil {
 			txn.readSlot = env.writeSlot
 		} else {
-			txn.readSlot.mu.Lock()
+			ptxn = parent._txn
+			parent.readSlot.mu.Lock()
 			txn.readSlot = parent.readSlot
-			txn.readSlot.refCount++ // know when we can deallocate it.
-			txn.readSlot.mu.Unlock()
+			// apparently sub-transactions don't commit/abort. so
+			// don't ref count them or the TestTxn_Sub test will panic.
+			parent.readSlot.mu.Unlock()
 		}
 	} else {
 		// read-only txn
@@ -123,6 +131,7 @@ func beginTxnWithReadSlot(env *Env, parent *Txn, flags uint, rs *ReadSlot) (txn 
 			}
 		}
 	}
+
 	ret := C.mdb_txn_begin(env._env, ptxn, C.uint(flags), &txn._txn)
 	if ret != success {
 		return nil, operrno("mdb_txn_begin", ret)
