@@ -153,8 +153,7 @@ func (c *Cursor) Get(setkey, setval []byte, op uint) (key, val []byte, err error
 		err = c.getVal2(setkey, setval, op)
 	}
 	if err != nil {
-		*c.txn.key = C.MDB_val{}
-		*c.txn.val = C.MDB_val{}
+		//c.txn.env.ReturnReadSlot(&txn.ReadSlot)
 		return nil, nil, err
 	}
 
@@ -171,17 +170,17 @@ func (c *Cursor) Get(setkey, setval []byte, op uint) (key, val []byte, err error
 			key = p
 		}
 	} else {
-		if c.txn.key == nil {
+		if c.txn.skey == nil {
 			panic("huh? why is c.txn.key nil?")
 		}
-		key = c.txn.bytes(c.txn.key)
+		key = c.txn.bytes(c.txn.skey)
 	}
-	val = c.txn.bytes(c.txn.val)
+	val = c.txn.bytes(c.txn.sval)
 
 	// Clear transaction storage record storage area for future use and to
 	// prevent dangling references.
-	*c.txn.key = C.MDB_val{}
-	*c.txn.val = C.MDB_val{}
+	// jea: No... Let the cursor keep using it for the next get.
+	//c.txn.env.ReturnReadSlot(&txn.ReadSlot)
 
 	return key, val, nil
 }
@@ -191,8 +190,8 @@ func (c *Cursor) Get(setkey, setval []byte, op uint) (key, val []byte, err error
 //
 // See mdb_cursor_get.
 func (c *Cursor) getVal0(op uint) error {
-	key := c.txn.key
-	val := c.txn.val
+	key := c.txn.skey
+	val := c.txn.sval
 	cur := c._c
 	ret := C.mdb_cursor_get(
 		cur,
@@ -207,8 +206,8 @@ func (c *Cursor) getVal0(op uint) error {
 //
 // See mdb_cursor_get.
 func (c *Cursor) getVal1(setkey []byte, op uint) error {
-	key := c.txn.key
-	val := c.txn.val
+	key := c.txn.skey
+	val := c.txn.sval
 	cur := c._c
 	ret := C.lmdbgo_mdb_cursor_get1(
 		cur,
@@ -225,8 +224,8 @@ func (c *Cursor) getVal1(setkey []byte, op uint) error {
 //
 // See mdb_cursor_get.
 func (c *Cursor) getVal2(setkey, setval []byte, op uint) error {
-	key := c.txn.key
-	val := c.txn.val
+	key := c.txn.skey
+	val := c.txn.sval
 	cur := c._c
 	ret := C.lmdbgo_mdb_cursor_get2(
 		cur,
@@ -272,20 +271,21 @@ func (c *Cursor) PutReserve(key []byte, n int, flags uint) ([]byte, error) {
 		return nil, c.putNilKey(flags)
 	}
 
-	c.txn.val.mv_size = C.size_t(n)
+	c.txn.sval.mv_size = C.size_t(n)
 	ret := C.lmdbgo_mdb_cursor_put1(
 		c._c,
 		(*C.char)(unsafe.Pointer(&key[0])), C.size_t(len(key)),
-		c.txn.val,
+		c.txn.sval,
 		C.uint(flags|C.MDB_RESERVE),
 	)
 	err := operrno("mdb_cursor_put", ret)
 	if err != nil {
-		*c.txn.val = C.MDB_val{}
+		// jea: no! *c.txn.val = C.MDB_val{}
 		return nil, err
 	}
-	b := getBytes(c.txn.val)
-	*c.txn.val = C.MDB_val{}
+	b := getBytes(c.txn.sval)
+	// jea no!
+	//*c.txn.val = C.MDB_val{}
 	return b, nil
 }
 

@@ -60,8 +60,9 @@ type Txn struct {
 
 	env  *Env
 	_txn *C.MDB_txn
-	key  *C.MDB_val
-	val  *C.MDB_val
+
+	// ReadSlot has key and val
+	ReadSlot
 
 	errLogf func(format string, v ...interface{})
 }
@@ -79,29 +80,17 @@ func beginTxn(env *Env, parent *Txn, flags uint) (*Txn, error) {
 		if flags&Readonly == 0 {
 			// In a write Txn we can use the shared, C-allocated key and value
 			// allocated by env, and freed when it is closed.
-			txn.key = env.ckey
-			txn.val = env.cval
+			txn.skey = env.wkey
+			txn.sval = env.wval
 		} else {
-			// It is not easy to share C.MDB_val values in this scenario unless
-			// there is a synchronized pool involved, which will increase
-			// overhead.  Further, allocating these values with C will add
-			// overhead both here and when the values are freed.
-
-			// problem is, this induces panics from cgo in go1.14:
-			//   panic: runtime error: cgo argument has Go pointer to Go pointer
-			// so don't allocate these in Go like this:
-			//   txn.key = new(C.MDB_val)
-			//   txn.val = new(C.MDB_val)
-			// instead, allocate them from C:
-			txn.key = (*C.MDB_val)(C.malloc(C.size_t(unsafe.Sizeof(C.MDB_val{}))))
-			txn.val = (*C.MDB_val)(C.malloc(C.size_t(unsafe.Sizeof(C.MDB_val{}))))
+			env.GetOrWaitForReadSlot(&txn.ReadSlot)
 		}
 	} else {
 		// Because parent Txn objects cannot be used while a sub-Txn is active
 		// it is OK for them to share their C.MDB_val objects.
 		ptxn = parent._txn
-		txn.key = parent.key
-		txn.val = parent.val
+		txn.skey = parent.skey
+		txn.sval = parent.sval
 	}
 	ret := C.mdb_txn_begin(env._env, ptxn, C.uint(flags), &txn._txn)
 	if ret != success {
@@ -235,13 +224,6 @@ func (txn *Txn) clearTxn() {
 	// Clear the C object to prevent any potential future use of the freed
 	// pointer.
 	txn._txn = nil
-
-	// release malloced memory here, since both Abort and Commit
-	// call clearTxn.
-	if txn.readonly {
-		C.free(unsafe.Pointer(txn.key))
-		C.free(unsafe.Pointer(txn.val))
-	}
 
 	// Clear txn.id because it no longer matches the value of txn._txn (and
 	// future calls to txn.ID() should not see the stale id).  Instead of
@@ -427,15 +409,15 @@ func (txn *Txn) Get(dbi DBI, key []byte) ([]byte, error) {
 	ret := C.lmdbgo_mdb_get(
 		txn._txn, C.MDB_dbi(dbi),
 		(*C.char)(unsafe.Pointer(&kdata[0])), C.size_t(kn),
-		txn.val,
+		txn.sval,
 	)
 	err := operrno("mdb_get", ret)
 	if err != nil {
-		*txn.val = C.MDB_val{}
+		//jea no! *txn.val = C.MDB_val{}
 		return nil, err
 	}
-	b := txn.bytes(txn.val)
-	*txn.val = C.MDB_val{}
+	b := txn.bytes(txn.sval)
+	// jea no! *txn.val = C.MDB_val{}
 	return b, nil
 }
 
@@ -474,20 +456,20 @@ func (txn *Txn) PutReserve(dbi DBI, key []byte, n int, flags uint) ([]byte, erro
 	if len(key) == 0 {
 		return nil, txn.putNilKey(dbi, flags)
 	}
-	txn.val.mv_size = C.size_t(n)
+	txn.sval.mv_size = C.size_t(n)
 	ret := C.lmdbgo_mdb_put1(
 		txn._txn, C.MDB_dbi(dbi),
 		(*C.char)(unsafe.Pointer(&key[0])), C.size_t(len(key)),
-		txn.val,
+		txn.sval,
 		C.uint(flags|C.MDB_RESERVE),
 	)
 	err := operrno("mdb_put", ret)
 	if err != nil {
-		*txn.val = C.MDB_val{}
+		//jea no! *txn.val = C.MDB_val{}
 		return nil, err
 	}
-	b := getBytes(txn.val)
-	*txn.val = C.MDB_val{}
+	b := getBytes(txn.sval)
+	// jea no! *txn.val = C.MDB_val{}
 	return b, nil
 }
 

@@ -69,21 +69,96 @@ type Env struct {
 	closeLock sync.RWMutex
 
 	// for writers
-	ckey *C.MDB_val
-	cval *C.MDB_val
+	wkey *C.MDB_val
+	wval *C.MDB_val
+
+	// maximum total readers
+	maxReaders int
+
+	// rkeyMu and rkeyCond protects rkeyAvail and rkey
+	rkeyMu   sync.Mutex
+	rkeyCond *sync.Cond
+
+	// available slots for readers are stored here
+	rkeyAvail []int
+
+	// keep a static pool of these, size maxReaders,
+	// to avoid a C.malloc() allocation on each read.
+	rkey []*C.MDB_val
+	rval []*C.MDB_val
+}
+
+type ReadSlot struct {
+	slot int
+	skey *C.MDB_val
+	sval *C.MDB_val
+}
+
+// GetOrWaitForReadSlot() returns when it has filled
+// in the values of rs to be usable. ReturnReadSlot
+// must be called with rs again when done reading.
+func (env *Env) GetOrWaitForReadSlot(rs *ReadSlot) {
+	env.rkeyMu.Lock()
+	for len(env.rkeyAvail) == 0 {
+		env.rkeyCond.Wait()
+	}
+	i := env.rkeyAvail[0]
+	env.rkeyAvail = env.rkeyAvail[1:]
+	rs.skey = env.rkey[i]
+	rs.sval = env.rval[i]
+	rs.slot = i
+	env.rkeyMu.Unlock()
+	vv("get read slot allocated rs.slot = %v", rs.slot)
+	return
+}
+
+// ReturnReadSlot must be called after the reader is
+// done reading to return the resource to the memory
+// pool. This avoids allocation, and defines a pool
+// of readers whose size is defined by the NewEnv
+// maxReaders parameter.
+func (env *Env) ReturnReadSlot(rs *ReadSlot) {
+	vv("return read slot rs.slot = %v", rs.slot)
+	env.rkeyMu.Lock()
+	env.rkeyAvail = append(env.rkeyAvail, rs.slot)
+	env.rkeyMu.Unlock()
+	env.rkeyCond.Signal()
 }
 
 // NewEnv allocates and initializes a new Env.
 //
+// It defaults to 256 concurrent readers max. If
+// you want more or fewer, use NewEnvMaxReaders()
+// and specify the limit.
+//
 // See mdb_env_create.
 func NewEnv() (*Env, error) {
-	env := new(Env)
+	vv("NewEnv called")
+	return NewEnvMaxReaders(256)
+}
+
+func NewEnvMaxReaders(maxReaders int) (*Env, error) {
+	env := &Env{
+		wkey:       (*C.MDB_val)(C.malloc(C.size_t(unsafe.Sizeof(C.MDB_val{})))),
+		wval:       (*C.MDB_val)(C.malloc(C.size_t(unsafe.Sizeof(C.MDB_val{})))),
+		rkey:       make([]*C.MDB_val, maxReaders),
+		rval:       make([]*C.MDB_val, maxReaders),
+		rkeyAvail:  make([]int, maxReaders, maxReaders),
+		maxReaders: maxReaders,
+	}
+	for i := 0; i < maxReaders; i++ {
+		env.rkey[i] = (*C.MDB_val)(C.malloc(C.size_t(unsafe.Sizeof(C.MDB_val{}))))
+		env.rval[i] = (*C.MDB_val)(C.malloc(C.size_t(unsafe.Sizeof(C.MDB_val{}))))
+		env.rkeyAvail[i] = i
+	}
+	env.rkeyCond = sync.NewCond(&env.rkeyMu)
+
 	ret := C.mdb_env_create(&env._env)
 	if ret != success {
 		return nil, operrno("mdb_env_create", ret)
 	}
-	env.ckey = (*C.MDB_val)(C.malloc(C.size_t(unsafe.Sizeof(C.MDB_val{}))))
-	env.cval = (*C.MDB_val)(C.malloc(C.size_t(unsafe.Sizeof(C.MDB_val{}))))
+	env.wkey = (*C.MDB_val)(C.malloc(C.size_t(unsafe.Sizeof(C.MDB_val{}))))
+	env.wval = (*C.MDB_val)(C.malloc(C.size_t(unsafe.Sizeof(C.MDB_val{}))))
 
 	runtime.SetFinalizer(env, (*Env).Close)
 	return env, nil
@@ -164,19 +239,28 @@ func (env *Env) ReaderCheck() (int, error) {
 }
 
 func (env *Env) close() bool {
+	env.closeLock.Lock()
 	if env._env == nil {
+		env.closeLock.Unlock()
 		return false
 	}
 
-	env.closeLock.Lock()
 	C.mdb_env_close(env._env)
 	env._env = nil
 	env.closeLock.Unlock()
 
-	C.free(unsafe.Pointer(env.ckey))
-	C.free(unsafe.Pointer(env.cval))
-	env.ckey = nil
-	env.cval = nil
+	C.free(unsafe.Pointer(env.wkey))
+	C.free(unsafe.Pointer(env.wval))
+	env.wkey = nil
+	env.wval = nil
+
+	for i := 0; i < env.maxReaders; i++ {
+		C.free(unsafe.Pointer(env.rkey[i]))
+		env.rkey[i] = nil
+		C.free(unsafe.Pointer(env.rval[i]))
+		env.rval[i] = nil
+	}
+
 	return true
 }
 
