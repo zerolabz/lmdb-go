@@ -626,3 +626,21 @@ func (env *Env) run(lock bool, flags uint, fn TxnOp) error {
 func (env *Env) CloseDBI(db DBI) {
 	C.mdb_dbi_close(env._env, C.MDB_dbi(db))
 }
+
+type SphynxReadFunc func(txn *Txn, readslot int) (err error)
+
+type sphynxReadJob struct {
+	f    SphynxReadFunc
+	done chan struct{}
+	err  error
+}
+
+func (env *Env) SphynxReader(sphynxRF SphynxReadFunc) (err error) {
+	txn, err := env.NewRawReadTxn()
+	panicOn(err)
+	job := newSphynxJob(sphynxRF)
+	env.readWorkCh[txn.ReadSlot] <- job
+	<-job.done
+	txn.Abort()
+	return job.err
+}

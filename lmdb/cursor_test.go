@@ -1070,3 +1070,168 @@ func TestConcurrentReadingAndWriting(t *testing.T) {
 
 	select {}
 }
+
+// when you make a new txn, you automatically
+// get a good goroutine to run it on.
+// lion(txn) + eagle(goroutin) = sphynx
+// the riddle is, will it work?
+func TestSphinx(t *testing.T) {
+
+	rand.Seed(1)
+	maxr := 9
+	env, err := NewEnvMaxReaders(maxr)
+	if err != nil {
+		t.Fatalf("env: %s", err)
+	}
+	path, err := ioutil.TempDir("", "mdb_test")
+	if err != nil {
+		t.Fatalf("tempdir: %v", err)
+	}
+	vv("temp dir '%v'", path)
+	err = os.MkdirAll(path, 0770)
+	if err != nil {
+		t.Fatalf("mkdir: %s", path)
+	}
+	err = env.SetMaxDBs(64 << 10)
+	if err != nil {
+		t.Fatalf("setmaxdbs: %v", err)
+	}
+	var myflags uint
+	err = env.Open(path, myflags, 0664)
+	if err != nil {
+		t.Fatalf("open: %s", err)
+	}
+
+	// cleanup
+	defer func() {
+		path, err := env.Path()
+		if err != nil {
+			t.Errorf("path: %v", err)
+		}
+		err = env.Close()
+		if err != nil {
+			t.Errorf("close: %s", err)
+		}
+		if path != "" {
+			err = os.RemoveAll(path)
+			if err != nil {
+				t.Errorf("remove: %v", err)
+			}
+		}
+	}()
+
+	var dbi DBI
+	err = env.Update(func(txn *Txn) (err error) {
+		dbi, err = txn.OpenDBI("testdb", Create)
+		return err
+	})
+	panicOn(err)
+
+	err = env.Update(func(txn *Txn) (err error) {
+		put := func(k, v []byte) {
+			if err == nil {
+				err = txn.Put(dbi, k, v, 0)
+			}
+		}
+		put([]byte{0}, []byte("v0"))
+		put([]byte("1big_huge_ginormous_key"), []byte("v1"))
+		put([]byte("2"), []byte("v2"))
+		put([]byte("3"), []byte("v3"))
+		put([]byte("4"), []byte("v4"))
+		put([]byte("5"), []byte("v5"))
+		return err
+	})
+	if err != nil {
+		t.Errorf("%s", err)
+	}
+
+	for {
+		committed, err := env.SphynxReader(func(txn *Txn, readslot int) (commit bool, err error) {
+			panicOn(err)
+			vv("new Sphynx has readslot %v has made a new txn", readslot)
+
+			cur, err := txn.OpenCursor(dbi)
+			panicOn(err)
+
+			for i := 0; i < 3e5; i++ {
+				var k, v []byte
+				var err error
+				if i == 0 {
+					// must give it at least a zero byte here to start.
+					k, v, err = cur.Get([]byte{0}, nil, SetRange)
+					panicOn(err)
+				} else {
+					k, v, err = cur.Get([]byte("hello"), nil, Next)
+					if IsNotFound(err) {
+						//vv("not found")
+						// start over
+						k, v, err = cur.Get([]byte{0}, nil, SetRange)
+						panicOn(err)
+					} else {
+						panicOn(err)
+					}
+				}
+				_, _ = k, v
+				//if i%1e4 == 0 {
+				vv("reader %v at i=%v  sees key:'%v' -> val:'%v'", readno, i, string(k), string(v))
+				//}
+
+				pause := rand.Intn(500)
+				time.Sleep(time.Millisecond * time.Duration(pause))
+			}
+			cur.Close()
+			txn.Abort()
+		})
+
+		vv("SphynxReader returned committed = '%v' and err='%v'", committed, err)
+	} // endless for
+
+	select {}
+	writer := func() {
+		// add one and delete one
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
+
+		for {
+			txn, err := env.NewWriteTxn()
+			panicOn(err)
+			vv("writer has made a new txn")
+
+			for i := 0; i < 3e5; i++ {
+
+				kx := rand.Intn(10)
+				k := []byte(fmt.Sprintf("writers_k%v", kx))
+				v := []byte(fmt.Sprintf("writers_v%v", kx))
+
+				// 90/10 put or delete
+				rnd := rand.Intn(10)
+				switch rnd {
+				default:
+					err := txn.Put(dbi, k, v, 0)
+					panicOn(err)
+				case 1: // 10% of the time, delete
+					err := txn.Del(dbi, k, nil)
+					if IsNotFound(err) {
+						// ok, ignore. will be frequent.
+					} else {
+						panicOn(err)
+						if i%1e4 == 0 {
+							vv("writer deleted k '%v' ok", string(k))
+						}
+					}
+				}
+
+				if i%1e5 == 0 {
+					vv("writer at i=%v  sees key:'%v' -> val:'%v'", i, string(k), string(v))
+				}
+			}
+			panicOn(txn.Commit())
+
+			pause := rand.Intn(500)
+			time.Sleep(time.Millisecond * time.Duration(pause))
+		} // endless for
+	}
+	go writer()
+
+	select {}
+}
