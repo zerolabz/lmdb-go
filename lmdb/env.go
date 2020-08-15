@@ -114,6 +114,7 @@ func newReadSlot(i int) (rs *ReadSlot) {
 	return
 }
 func (rs *ReadSlot) free() {
+	vv("free() top, about to lock rs.mu")
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
 	if rs.owner != 0 {
@@ -145,6 +146,7 @@ func (env *Env) GetOrWaitForReadSlot() (rs *ReadSlot, err error) {
 	i := env.rkeyAvail[0]
 	env.rkeyAvail = env.rkeyAvail[1:]
 	rs = env.readSlots[i]
+	vv("GetOrWaitForReadSlot(), about to lock rs.mu")
 	rs.mu.Lock()
 	if rs.owner != 0 {
 		vv("rs %p is still owned by gid %v", rs, rs.owner)
@@ -158,8 +160,9 @@ func (env *Env) GetOrWaitForReadSlot() (rs *ReadSlot, err error) {
 }
 
 func (rs *ReadSlot) confirmOwned() {
+	vv("confirmOwned top, about to lock rs.mu")
 	gid := curGID()
-	rs.mu.Lock()
+	rs.mu.Lock() // deadlock here 4x
 	defer rs.mu.Unlock()
 	if rs.owner != gid {
 		panic(fmt.Sprintf("we(gid=%v) are not the owner of this ReadSlot %v p=%p, gid is: %v", gid, rs.slot, rs, rs.owner))
@@ -172,9 +175,10 @@ func (rs *ReadSlot) confirmOwned() {
 // of readers whose size is defined by the NewEnv
 // maxReaders parameter.
 func (env *Env) ReturnReadSlot(rs *ReadSlot) {
+	vv("ReturnReadSlot, about to lock rkeyMu then rs.mu, rs=%p, slot %v", rs, rs.slot)
 	env.rkeyMu.Lock()
-	rs.mu.Lock()
 
+	//rs.mu.Lock()
 	rs.refCount--
 	if rs.refCount == 0 {
 		env.rkeyAvail = append(env.rkeyAvail, rs.slot)
@@ -184,13 +188,14 @@ func (env *Env) ReturnReadSlot(rs *ReadSlot) {
 
 		// can't use defer because we want to signal unlocked,
 		// to avoid spinning on Cond locks and missing the wake-up signal.
-		rs.mu.Unlock()
+		//rs.mu.Unlock()
 		env.rkeyMu.Unlock()
 		env.rkeyCond.Signal()
 		return
 	}
-	rs.mu.Unlock()
+	//rs.mu.Unlock()
 	env.rkeyMu.Unlock()
+	vv("ReturnReadSlot done for rs=%p")
 }
 
 // NewEnv allocates and initializes a new Env.

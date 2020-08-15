@@ -1333,7 +1333,7 @@ func TestTwoDatabaseFilesOpenAtOnce(t *testing.T) {
 						var err error
 						if i == 0 {
 							// must give it at least a zero byte here to start.
-							k, v, err = cur.Get([]byte{0}, nil, SetRange)
+							k, v, err = cur.Get([]byte{0}, nil, SetRange) // deadlock here
 							panicOn(err)
 						} else {
 							k, v, err = cur.Get([]byte("hello"), nil, Next)

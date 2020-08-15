@@ -148,7 +148,7 @@ func (c *Cursor) Get(setkey, setval []byte, op uint) (key, val []byte, err error
 	vv("Cursor.Get called by gid=%v with slot %v", curGID(), c.txn.readSlot.slot)
 	defer c.txn.readSlot.mu.Unlock()
 
-	c.txn.readSlot.confirmOwned()
+	//c.txn.readSlot.confirmOwned() //  // deadlock here, can't debug print and lock c.txn.readSlot.mu here
 	switch {
 	case len(setkey) == 0:
 		err = c.getVal0(op)
