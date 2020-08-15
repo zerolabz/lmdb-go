@@ -257,7 +257,7 @@ func (txn *Txn) clearTxn() {
 	txn._txn = nil
 
 	if txn.readonly {
-		vv("clearTx is returning read slot %v", txn.readSlot.slot)
+		//vv("clearTx is returning read slot %v", txn.readSlot.slot)
 		txn.env.ReturnReadSlot(txn.readSlot)
 	}
 

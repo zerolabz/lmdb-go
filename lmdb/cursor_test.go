@@ -1381,17 +1381,17 @@ func TestTwoDatabaseFilesOpenAtOnce(t *testing.T) {
 			defer runtime.UnlockOSThread()
 
 			for {
-				vv("writer begin BlockUntil(nread=%v)", nread)
+				//vv("writer begin BlockUntil(nread=%v)", nread)
 				barrier.BlockUntil(nread)
-				vv("writer back from BlockUntil(nread=%v)", nread)
+				//vv("writer back from BlockUntil(nread=%v)", nread)
 
 				txn, err := env.NewWriteTxn()
 				panicOn(err)
-				vv("writer has made a new txn")
+				//vv("writer has made a new txn")
 
 				for i := 0; i < 3e5; i++ {
 
-					kx := rand.Intn(10)
+					kx := rand.Intn(100)
 					k := []byte(fmt.Sprintf("writers_k%v", kx))
 					v := []byte(fmt.Sprintf("writers_v%v", kx))
 
@@ -1408,13 +1408,13 @@ func TestTwoDatabaseFilesOpenAtOnce(t *testing.T) {
 						} else {
 							panicOn(err)
 							if i%1e4 == 0 {
-								vv("writer deleted k '%v' ok", string(k))
+								//vv("writer deleted k '%v' ok", string(k))
 							}
 						}
 					}
 
 					if i%1e5 == 0 {
-						vv("writer at i=%v  sees key:'%v' -> val:'%v'", i, string(k), string(v))
+						//vv("writer at i=%v  sees key:'%v' -> val:'%v'", i, string(k), string(v))
 					}
 				}
 				panicOn(txn.Commit())
@@ -1451,9 +1451,9 @@ func TestTwoDatabaseFilesOpenAtOnce(t *testing.T) {
 	panicOn(err)
 	_ = envA
 
-	//	envB, err := openDB(pathB)
-	//panicOn(err)
-	//_ = envB
+	envB, err := openDB(pathB)
+	panicOn(err)
+	_ = envB
 
 	select {}
 }
