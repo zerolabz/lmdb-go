@@ -7,11 +7,12 @@ import (
 // Barrier allows us to temporarily halt all readers, so that
 // a writer can commit alone and thus compact the db.
 // The Barrier starts unblocked, alllowing passage to any
-// caller of WaitForGate().
+// caller of WaitAtGate().
 type Barrier struct {
 	wait       chan *appointment // send upon entering the waiting room.
 	halt       *idem.Halter
 	blockReqCh chan *blockReq
+	unblockCh  chan *unblock
 }
 
 type blockReq struct {
@@ -39,7 +40,7 @@ func newAppointment(id int) *appointment {
 }
 
 // NewBarrier is either open, allowing immediate passage,
-// or blocked, halting all callers at WaitForGate()
+// or blocked, halting all callers at WaitAtGate()
 // until the barrier is opened.
 //
 // Barrier.Close() must be called when the barrier
@@ -49,6 +50,7 @@ func NewBarrier() (b *Barrier) {
 		wait:       make(chan *appointment), // waiters indicate they are waiting for the gate by sending here.
 		halt:       idem.NewHalter(),
 		blockReqCh: make(chan *blockReq),
+		unblockCh:  make(chan *unblock),
 	}
 	go func() {
 		defer b.halt.Done.Close()
@@ -79,13 +81,15 @@ func NewBarrier() (b *Barrier) {
 				}
 				waitlist = append(waitlist, appt)
 				if len(waitlist) >= curBlockReq.count {
-					for _, appt := range waitlist {
-						close(appt.done)
-					}
-					waitlist = nil
 					close(curBlockReq.done)
-					curBlockReq = nil
 				}
+			case ub := <-b.unblockCh:
+				for _, appt := range waitlist {
+					close(appt.done)
+				}
+				waitlist = nil
+				curBlockReq = nil
+				close(ub.done)
 			case <-b.halt.ReqStop.Chan:
 				return
 			}
@@ -94,7 +98,7 @@ func NewBarrier() (b *Barrier) {
 	return
 }
 
-func (b *Barrier) WaitForGate(id int) {
+func (b *Barrier) WaitAtGate(id int) {
 	appt := newAppointment(id)
 	select {
 	case b.wait <- appt:
@@ -111,14 +115,38 @@ func (b *Barrier) Close() {
 	<-b.halt.Done.Chan
 }
 
-// BlockAndWaitUntilCountAtGate is called with a count, the
+type unblock struct {
+	done chan struct{}
+}
+
+func newUnblock() *unblock {
+	return &unblock{
+		done: make(chan struct{}),
+	}
+}
+
+// Unblock lets all waiting goroutines resume execution.
+func (b *Barrier) Unblock() {
+	ub := newUnblock()
+	select {
+	case b.unblockCh <- ub:
+		select {
+		case <-ub.done:
+		case <-b.halt.ReqStop.Chan:
+		}
+	case <-b.halt.ReqStop.Chan:
+	}
+}
+
+// BlockUntil is called with a count, the
 // number of waiters required to be present and waiting
 // at the gate before call returns.
 // A count of <= 0 will return immediately without
 // checking the barrier. Otherwise we raise the barrier
 // and wait until we have seen count other goroutines waiting
-// on it.
-func (b *Barrier) BlockAndWaitUntilCountAtGate(count int) {
+// on it. We return without releasing the waiters. Call
+// Open when you want them to resume.
+func (b *Barrier) BlockUntil(count int) {
 	if count <= 0 {
 		return
 	}

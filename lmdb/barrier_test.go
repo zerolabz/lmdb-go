@@ -13,7 +13,7 @@ func TestBarrierHolds(t *testing.T) {
 	released := int64(0)
 
 	waiter := func(i int) {
-		b.WaitForGate(i)
+		b.WaitAtGate(i)
 		//vv("goro %v is released", i)
 		atomic.AddInt64(&released, 1)
 	}
@@ -28,8 +28,11 @@ func TestBarrierHolds(t *testing.T) {
 	}
 	//vv("good: barrier started open")
 
+	seenAll := make(chan bool)
 	go func() {
-		b.BlockAndWaitUntilCountAtGate(4)
+		b.BlockUntil(4)
+		//vv("we have seen 4 waiters")
+		close(seenAll)
 	}()
 	for i := 0; i < 3; i++ {
 		go waiter(i)
@@ -41,7 +44,22 @@ func TestBarrierHolds(t *testing.T) {
 		panic("bad: barrier did not hold back goro")
 	}
 	//vv("good: barrier of 4 did not release on 3")
-	waiter(4)
-	//vv("good: barrier of 4 released on 4")
+	go waiter(4)
+	<-seenAll
+	//vv("good: barrier of 4 counted all 4")
+
+	time.Sleep(time.Second)
+	r = atomic.SwapInt64(&released, 0)
+	if r != 0 {
+		panic("bad: barrier did not hold back goro, should wait for unblock")
+	}
+
+	b.Unblock()
+
+	time.Sleep(time.Second)
+	r = atomic.SwapInt64(&released, 0)
+	if r != 4 {
+		panic("bad: unblock should have released 4 goro")
+	}
 
 }

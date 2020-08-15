@@ -1317,6 +1317,8 @@ func TestTwoDatabaseFilesOpenAtOnce(t *testing.T) {
 		})
 		panicOn(err)
 
+		barrier := NewBarrier()
+
 		reader := func() {
 			for {
 				err := env.SphynxReader(func(txn *Txn, readslot int) (err error) {
@@ -1353,14 +1355,17 @@ func TestTwoDatabaseFilesOpenAtOnce(t *testing.T) {
 					return nil
 				})
 				vv("SphynxReader returned err='%v'", err)
+				barrier.WaitAtGate(curGID())
+
 				pause := rand.Intn(100)
 				time.Sleep(time.Millisecond * time.Duration(pause))
 
 			} // endless for
 		} // defn reader
 
+		nread := 11
 		// start a bunch of readers, staggered
-		for k := 0; k < 11; k++ {
+		for k := 0; k < nread; k++ {
 			pause := rand.Intn(121)
 			time.Sleep(time.Millisecond * time.Duration(pause))
 			go reader()
@@ -1372,6 +1377,9 @@ func TestTwoDatabaseFilesOpenAtOnce(t *testing.T) {
 			defer runtime.UnlockOSThread()
 
 			for {
+
+				barrier.BlockUntil(nread)
+
 				txn, err := env.NewWriteTxn()
 				panicOn(err)
 				vv("writer has made a new txn")
@@ -1412,6 +1420,8 @@ func TestTwoDatabaseFilesOpenAtOnce(t *testing.T) {
 
 				pause := rand.Intn(100)
 				time.Sleep(time.Millisecond * time.Duration(pause))
+
+				barrier.Unblock()
 			} // endless for
 		}
 		go writer()
@@ -1436,9 +1446,9 @@ func TestTwoDatabaseFilesOpenAtOnce(t *testing.T) {
 	panicOn(err)
 	_ = envA
 
-	envB, err := openDB(pathB)
-	panicOn(err)
-	_ = envB
+	//	envB, err := openDB(pathB)
+	//panicOn(err)
+	//_ = envB
 
 	select {}
 }
