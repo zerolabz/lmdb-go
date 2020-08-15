@@ -937,13 +937,13 @@ func TestConcurrentReadingAndWriting(t *testing.T) {
 			var err error
 			if i == 0 {
 				// must give it enough space to write in for the key!
-				k, v, err = cur.Get([]byte("0"), nil, SetRange)
+				k, v, err = cur.Get([]byte{0}, nil, SetRange)
 				panicOn(err)
 			} else {
 				k, v, err = cur.Get([]byte("hello"), nil, Next)
 				if IsNotFound(err) {
 					vv("not found")
-					k, v, err = cur.Get([]byte("0"), nil, SetRange)
+					k, v, err = cur.Get([]byte{0}, nil, SetRange)
 					panicOn(err)
 				} else {
 					panicOn(err)
