@@ -1436,5 +1436,9 @@ func TestTwoDatabaseFilesOpenAtOnce(t *testing.T) {
 	panicOn(err)
 	_ = envA
 
+	envB, err := openDB(pathB)
+	panicOn(err)
+	_ = envB
+
 	select {}
 }
