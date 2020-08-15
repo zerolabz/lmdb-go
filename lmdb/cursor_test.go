@@ -891,38 +891,39 @@ func BenchmarkCursor_Renew(b *testing.B) {
 }
 
 func TestConcurrentReadingAndWriting(t *testing.T) {
-	env := setup(t)
-	defer clean(env, t)
-
-	var dbi DBI
-	err := env.Update(func(txn *Txn) (err error) {
-		dbi, err = txn.OpenDBI("testdb", Create)
-		return err
-	})
-	panicOn(err)
-
-	err = env.Update(func(txn *Txn) (err error) {
-		put := func(k, v []byte) {
-			if err == nil {
-				err = txn.Put(dbi, k, v, 0)
-			}
-		}
-		put([]byte("k1"), []byte("v1"))
-		put([]byte("k2"), []byte("v2"))
-		put([]byte("k3"), []byte("v3"))
-		put([]byte("k4"), []byte("v4"))
-		put([]byte("k5"), []byte("v5"))
-		return err
-	})
-	if err != nil {
-		t.Errorf("%s", err)
-	}
 
 	// start goroutines that are constantly reading
 	// from a cursor
 	reader := func(i int) {
 		runtime.LockOSThread()
 		defer runtime.UnlockOSThread()
+
+		env := setup(t)
+		defer clean(env, t)
+
+		var dbi DBI
+		err := env.Update(func(txn *Txn) (err error) {
+			dbi, err = txn.OpenDBI("testdb", Create)
+			return err
+		})
+		panicOn(err)
+
+		err = env.Update(func(txn *Txn) (err error) {
+			put := func(k, v []byte) {
+				if err == nil {
+					err = txn.Put(dbi, k, v, 0)
+				}
+			}
+			put([]byte("k1"), []byte("v1"))
+			put([]byte("k2"), []byte("v2"))
+			put([]byte("k3"), []byte("v3"))
+			put([]byte("k4"), []byte("v4"))
+			put([]byte("k5"), []byte("v5"))
+			return err
+		})
+		if err != nil {
+			t.Errorf("%s", err)
+		}
 
 		txn, err := env.NewRawReadTxn()
 		panicOn(err)
@@ -931,10 +932,24 @@ func TestConcurrentReadingAndWriting(t *testing.T) {
 		panicOn(err)
 		defer cur.Close()
 
-		for {
-			k, v, err := cur.Get([]byte(""), nil, SetRange)
-			panicOn(err)
-			vv("reader i=%v  sees key:'%v' -> val:'%v'", i, k, v)
+		for i := 0; true; i++ {
+			var k, v []byte
+			var err error
+			if i == 0 {
+				// must give it enough space to write in for the key!
+				k, v, err = cur.Get([]byte("hello"), nil, SetRange)
+				panicOn(err)
+			} else {
+				k, v, err = cur.Get([]byte("hello"), nil, Next)
+				if IsNotFound(err) {
+					vv("not found")
+					k, v, err = cur.Get(nil, nil, SetRange)
+					panicOn(err)
+				} else {
+					panicOn(err)
+				}
+			}
+			vv("reader i=%v  sees key:'%v' -> val:'%v'", i, string(k), string(v))
 			time.Sleep(time.Millisecond * 500)
 		}
 	}
