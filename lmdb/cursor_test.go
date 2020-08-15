@@ -892,39 +892,39 @@ func BenchmarkCursor_Renew(b *testing.B) {
 
 func TestConcurrentReadingAndWriting(t *testing.T) {
 
+	env := setup(t)
+	defer clean(env, t)
+
+	var dbi DBI
+	err := env.Update(func(txn *Txn) (err error) {
+		dbi, err = txn.OpenDBI("testdb", Create)
+		return err
+	})
+	panicOn(err)
+
+	err = env.Update(func(txn *Txn) (err error) {
+		put := func(k, v []byte) {
+			if err == nil {
+				err = txn.Put(dbi, k, v, 0)
+			}
+		}
+		put([]byte{0}, []byte("v0"))
+		put([]byte("1big_huge_ginormous_key"), []byte("v1"))
+		put([]byte("2"), []byte("v2"))
+		put([]byte("3"), []byte("v3"))
+		put([]byte("4"), []byte("v4"))
+		put([]byte("5"), []byte("v5"))
+		return err
+	})
+	if err != nil {
+		t.Errorf("%s", err)
+	}
+
 	// start goroutines that are constantly reading
 	// from a cursor
 	reader := func(i int) {
 		runtime.LockOSThread()
 		defer runtime.UnlockOSThread()
-
-		env := setup(t)
-		defer clean(env, t)
-
-		var dbi DBI
-		err := env.Update(func(txn *Txn) (err error) {
-			dbi, err = txn.OpenDBI("testdb", Create)
-			return err
-		})
-		panicOn(err)
-
-		err = env.Update(func(txn *Txn) (err error) {
-			put := func(k, v []byte) {
-				if err == nil {
-					err = txn.Put(dbi, k, v, 0)
-				}
-			}
-			put([]byte{0}, []byte("v0"))
-			put([]byte("1big_huge_ginormous_key"), []byte("v1"))
-			put([]byte("2"), []byte("v2"))
-			put([]byte("3"), []byte("v3"))
-			put([]byte("4"), []byte("v4"))
-			put([]byte("5"), []byte("v5"))
-			return err
-		})
-		if err != nil {
-			t.Errorf("%s", err)
-		}
 
 		txn, err := env.NewRawReadTxn()
 		panicOn(err)
@@ -937,7 +937,7 @@ func TestConcurrentReadingAndWriting(t *testing.T) {
 			var k, v []byte
 			var err error
 			if i == 0 {
-				// must give it enough space to write in for the key!
+				// must give it at least a zero byte here to start.
 				k, v, err = cur.Get([]byte{0}, nil, SetRange)
 				panicOn(err)
 			} else {
