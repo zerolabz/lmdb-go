@@ -14,6 +14,18 @@ type Barrier struct {
 	blockReqCh chan *blockReq
 }
 
+type blockReq struct {
+	count int
+	done  chan struct{}
+}
+
+func newBlockReq(count int) *blockReq {
+	return &blockReq{
+		count: count,
+		done:  make(chan struct{}),
+	}
+}
+
 type appointment struct {
 	id   int
 	done chan struct{}
@@ -110,16 +122,4 @@ func (b *Barrier) BlockAndWaitUntilCountAtGate(count int) {
 	req := newBlockReq(count)
 	b.blockReqCh <- req
 	<-req.done
-}
-
-type blockReq struct {
-	count int
-	done  chan struct{}
-}
-
-func newBlockReq(count int) *blockReq {
-	return &blockReq{
-		count: count,
-		done:  make(chan struct{}),
-	}
 }
