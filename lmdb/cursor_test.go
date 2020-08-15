@@ -922,7 +922,7 @@ func TestConcurrentReadingAndWriting(t *testing.T) {
 
 	// start goroutines that are constantly reading
 	// from a cursor
-	reader := func(i int) {
+	reader := func(readno int) {
 		runtime.LockOSThread()
 		defer runtime.UnlockOSThread()
 
@@ -950,12 +950,14 @@ func TestConcurrentReadingAndWriting(t *testing.T) {
 					panicOn(err)
 				}
 			}
-			vv("reader i=%v  sees key:'%v' -> val:'%v'", i, string(k), string(v))
+			vv("reader %v at i=%v  sees key:'%v' -> val:'%v'", readno, i, string(k), string(v))
 			time.Sleep(time.Millisecond * 500)
 		}
 	}
 
 	go reader(0)
+	time.Sleep(250 * time.Millisecond)
+	go reader(1)
 
 	writer := func() {
 		// add one and delete one
