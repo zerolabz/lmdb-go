@@ -652,11 +652,12 @@ type sphynxReadJob struct {
 	err      error
 	flags    uint
 	readSlot ReadSlot
+	env      *Env
 }
 
-func newSphyxReadJob(f SphynxReadFunc, txn *Txn) (j *sphynxReadJob) {
+func (env *Env) newSphynxReadJob(f SphynxReadFunc) (j *sphynxReadJob) {
 	j = &sphynxReadJob{
-		txn:   txn,
+		env:   env,
 		f:     f,
 		flags: Readonly,
 		done:  make(chan struct{}),
@@ -665,7 +666,7 @@ func newSphyxReadJob(f SphynxReadFunc, txn *Txn) (j *sphynxReadJob) {
 }
 
 func (env *Env) SphynxReader(sphynxRF SphynxReadFunc) (err error) {
-	job := newSphynxJob(sphynxRF)
+	job := env.newSphynxReadJob(sphynxRF)
 
 	// block until we can get a read slot
 	err = env.GetOrWaitForReadSlot(&job.readSlot)
@@ -696,7 +697,7 @@ func newSphynxReadWorker() *sphynxReadWorker {
 			case <-w.halt.ReqStop.Chan:
 				return
 			case job := <-w.jobsCh:
-				txn, err := env.BeginTxnWithReadSlot(nil, job.flags, &job.readSlot)
+				txn, err := beginTxnWithReadSlot(job.env, nil, job.flags, &job.readSlot)
 				panicOn(err)
 
 				// run the read-only txn code on this safely locked
