@@ -695,6 +695,15 @@ func (env *Env) CloseDBI(db DBI) {
 	C.mdb_dbi_close(env._env, C.MDB_dbi(db))
 }
 
+// SphynxReadFunc is allowed to use txn ONLY on the
+// the new goroutine that it will be run with, because
+// this newly created for this purpose goroutine is locked
+// to the OS thread that created the txn in LMDB, and
+// LMDB requires all subsequent access to be from the
+// same thread.
+//
+// Hence if you start goroutines from inside this function,
+// they cannot do txn or cursor operations.
 type SphynxReadFunc func(txn *Txn, readslot int) (err error)
 
 // job cannot actually know about the txn, since that

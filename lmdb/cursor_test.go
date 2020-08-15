@@ -1257,6 +1257,7 @@ func TestTwoDatabaseFilesOpenAtOnce(t *testing.T) {
 			t.Fatalf("env: %s", err)
 		}
 
+		env.SetMapSize(1 << 20) // default 1MB is too small, but catches our growth without bounds problem.
 		//err = os.MkdirAll(path, 0770)
 
 		err = env.SetMaxDBs(64 << 10)
@@ -1405,7 +1406,6 @@ func TestTwoDatabaseFilesOpenAtOnce(t *testing.T) {
 		}
 		go writer()
 
-		select {}
 		return env, nil
 	}
 	_ = openDB
