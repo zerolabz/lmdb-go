@@ -1021,17 +1021,22 @@ func TestConcurrentReadingAndWriting(t *testing.T) {
 		for {
 			txn, err := env.NewWriteTxn()
 			panicOn(err)
-			vv("writer has made a new txn", readno)
+			vv("writer has made a new txn")
 
 			for i := 0; i < 3e5; i++ {
-				var k, v []byte
-				var err error
+
+				kx := rand.Intn(100)
+				vx := rand.Intn(100)
+				k := []byte(fmt.Sprintf("writers_k%v", kx))
+				v := []byte(fmt.Sprintf("writers_v%v", vx))
+				err := txn.Put(dbi, k, v, 0)
+				panicOn(err)
+
 				if i%1e5 == 0 {
-					vv("writer at i=%v  sees key:'%v' -> val:'%v'", readno, i, string(k), string(v))
+					vv("writer at i=%v  sees key:'%v' -> val:'%v'", i, string(k), string(v))
 				}
 			}
-			cur.Close()
-			txn.Abort()
+			panicOn(txn.Commit())
 
 			pause := rand.Intn(500)
 			time.Sleep(time.Millisecond * time.Duration(pause))
