@@ -71,10 +71,12 @@ func NewBarrier() (b *Barrier) {
 					panic("got 2nd block request atop of first")
 				}
 				curBlockReq = br
+				vv("barrier: request to block for %v waiters", br.count)
 				if len(waitlist) != 0 {
 					panic("had waiters when we were open, internal/client bug")
 				}
 			case appt := <-b.wait:
+				vv("barrier.wait sees appt = '%#v' and curBlockReq = '%#v'", appt, curBlockReq)
 				if curBlockReq == nil {
 					close(appt.done)
 					continue

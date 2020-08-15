@@ -1328,7 +1328,7 @@ func TestTwoDatabaseFilesOpenAtOnce(t *testing.T) {
 					cur, err := txn.OpenCursor(dbi)
 					panicOn(err)
 
-					for i := 0; i < 3e5; i++ {
+					for i := 0; i < 3; i++ {
 						var k, v []byte
 						var err error
 						if i == 0 {
@@ -1355,7 +1355,10 @@ func TestTwoDatabaseFilesOpenAtOnce(t *testing.T) {
 					return nil
 				})
 				vv("SphynxReader returned err='%v'", err)
-				barrier.WaitAtGate(curGID())
+
+				gid := curGID()
+				barrier.WaitAtGate(gid)
+				vv("reader gid %v has passed the barrierWaitAtGate", gid)
 
 				pause := rand.Intn(100)
 				time.Sleep(time.Millisecond * time.Duration(pause))
@@ -1377,8 +1380,9 @@ func TestTwoDatabaseFilesOpenAtOnce(t *testing.T) {
 			defer runtime.UnlockOSThread()
 
 			for {
-
+				vv("writer begin BlockUntil(nread=%v)", nread)
 				barrier.BlockUntil(nread)
+				vv("writer back from BlockUntil(nread=%v)", nread)
 
 				txn, err := env.NewWriteTxn()
 				panicOn(err)

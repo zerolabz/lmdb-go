@@ -178,7 +178,7 @@ func (env *Env) ReturnReadSlot(rs *ReadSlot) {
 	vv("ReturnReadSlot, about to lock rkeyMu then rs.mu, rs=%p, slot %v", rs, rs.slot)
 	env.rkeyMu.Lock()
 
-	//rs.mu.Lock()
+	rs.mu.Lock()
 	rs.refCount--
 	if rs.refCount == 0 {
 		env.rkeyAvail = append(env.rkeyAvail, rs.slot)
@@ -188,12 +188,12 @@ func (env *Env) ReturnReadSlot(rs *ReadSlot) {
 
 		// can't use defer because we want to signal unlocked,
 		// to avoid spinning on Cond locks and missing the wake-up signal.
-		//rs.mu.Unlock()
+		rs.mu.Unlock()
 		env.rkeyMu.Unlock()
 		env.rkeyCond.Signal()
 		return
 	}
-	//rs.mu.Unlock()
+	rs.mu.Unlock()
 	env.rkeyMu.Unlock()
 	vv("ReturnReadSlot done for rs=%p")
 }
