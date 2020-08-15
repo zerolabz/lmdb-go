@@ -1074,8 +1074,8 @@ func TestConcurrentReadingAndWriting(t *testing.T) {
 // when you make a new txn, you automatically
 // get a good goroutine to run it on.
 // lion(txn) + eagle(goroutine) = sphynx
-// the riddle is still a mystery.
-func TestSphinx(t *testing.T) {
+// the riddle will be revealed shortly.
+func TestSphynx(t *testing.T) {
 
 	rand.Seed(1)
 	maxr := 9
@@ -1145,47 +1145,61 @@ func TestSphinx(t *testing.T) {
 		t.Errorf("%s", err)
 	}
 
-	for {
-		err := env.SphynxReader(func(txn *Txn, readslot int) (err error) {
-			panicOn(err)
-			vv("new Sphynx has readslot %v has made a new txn", readslot)
+	reader := func() {
+		for {
+			err := env.SphynxReader(func(txn *Txn, readslot int) (err error) {
+				panicOn(err)
+				vv("new Sphynx has readslot %v has made a new txn", readslot)
 
-			cur, err := txn.OpenCursor(dbi)
-			panicOn(err)
+				cur, err := txn.OpenCursor(dbi)
+				panicOn(err)
 
-			for i := 0; i < 3e5; i++ {
-				var k, v []byte
-				var err error
-				if i == 0 {
-					// must give it at least a zero byte here to start.
-					k, v, err = cur.Get([]byte{0}, nil, SetRange)
-					panicOn(err)
-				} else {
-					k, v, err = cur.Get([]byte("hello"), nil, Next)
-					if IsNotFound(err) {
-						//vv("not found")
-						// start over
+				for i := 0; i < 10; i++ {
+					var k, v []byte
+					var err error
+					if i == 0 {
+						// must give it at least a zero byte here to start.
 						k, v, err = cur.Get([]byte{0}, nil, SetRange)
 						panicOn(err)
 					} else {
-						panicOn(err)
+						k, v, err = cur.Get([]byte("hello"), nil, Next)
+						if IsNotFound(err) {
+							//vv("not found")
+							// start over
+							k, v, err = cur.Get([]byte{0}, nil, SetRange)
+							panicOn(err)
+						} else {
+							panicOn(err)
+						}
 					}
+					_, _ = k, v
+					//if i%1e4 == 0 {
+					vv("reader %v at i=%v  sees key:'%v' -> val:'%v'", readslot, i, string(k), string(v))
+					//}
+
+					pause := rand.Intn(500)
+					time.Sleep(time.Millisecond * time.Duration(pause))
 				}
-				_, _ = k, v
-				//if i%1e4 == 0 {
-				vv("reader %v at i=%v  sees key:'%v' -> val:'%v'", readslot, i, string(k), string(v))
-				//}
+				cur.Close()
+				return nil
+			})
+			vv("SphynxReader returned err='%v'", err)
+		} // endless for
+	} // defn reader
 
-				pause := rand.Intn(500)
-				time.Sleep(time.Millisecond * time.Duration(pause))
-			}
-			cur.Close()
-			txn.Abort()
-			return nil
-		})
-
-		vv("SphynxReader returned err='%v'", err)
-	} // endless for
+	// start a bunch of readers, staggered
+	k := 0
+	for j := 0; j < 4; j++ {
+		go reader()
+		k++
+		time.Sleep(250 * time.Millisecond)
+		go reader()
+		k++
+		time.Sleep(125 * time.Millisecond)
+		go reader()
+		k++
+		time.Sleep(75 * time.Millisecond)
+	}
 
 	select {}
 	writer := func() {

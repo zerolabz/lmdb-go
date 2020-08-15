@@ -645,8 +645,9 @@ func (env *Env) CloseDBI(db DBI) {
 
 type SphynxReadFunc func(txn *Txn, readslot int) (err error)
 
+// job cannot actually know about the txn, since that
+// must stay local to the goroutine(thread) that created it.
 type sphynxReadJob struct {
-	txn      *Txn
 	f        SphynxReadFunc
 	done     chan struct{}
 	err      error
@@ -717,7 +718,7 @@ func newSphynxReadWorker() *sphynxReadWorker {
 				job.err = job.f(txn, txn.slot)
 
 				// have to do this while still on this goroutine.
-				job.txn.Abort() // cleanup reader
+				txn.Abort() // cleanup reader
 				close(job.done)
 			}
 		}
