@@ -150,7 +150,7 @@ func (env *Env) GetOrWaitForReadSlot() (rs *ReadSlot, err error) {
 	}
 	rs.refCount = 1
 	rs.owner = curGID()
-	vv("slot %v now owned by gid=%v", i, rs.owner)
+	vv("slot %v retreived from avail pool, now owned by gid=%v", i, rs.owner)
 	rs.mu.Unlock()
 	return
 }
@@ -176,7 +176,7 @@ func (env *Env) ReturnReadSlot(rs *ReadSlot) {
 	rs.refCount--
 	if rs.refCount == 0 {
 		env.rkeyAvail = append(env.rkeyAvail, rs.slot)
-		vv("returned slot i = %v  from gid=%v", rs.slot, rs.owner)
+		vv("returned to avail, slot %v  from gid=%v", rs.slot, rs.owner)
 
 		rs.owner = 0 // not owned anymore
 
@@ -778,7 +778,7 @@ func newSphynxReadWorker() *sphynxReadWorker {
 					gid := curGID()
 					job.readSlot.mu.Lock()
 					slot := job.readSlot.slot
-					vv("worker goro gid %v taking ownership of slot %v from prior owner %v", gid, slot, job.readSlow.owner)
+					vv("worker goro gid %v taking ownership of slot %v from prior owner %v", gid, slot, job.readSlot.owner)
 					job.readSlot.owner = gid
 					job.readSlot.mu.Unlock()
 
