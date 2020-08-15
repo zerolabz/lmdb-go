@@ -104,12 +104,14 @@ type ReadSlot struct {
 	owner    int
 }
 
-func newReadSlot(i int) *ReadSlot {
-	return &ReadSlot{
+func newReadSlot(i int) (rs *ReadSlot) {
+	rs = &ReadSlot{
 		slot: i,
 		skey: (*C.MDB_val)(C.malloc(C.size_t(unsafe.Sizeof(C.MDB_val{})))),
 		sval: (*C.MDB_val)(C.malloc(C.size_t(unsafe.Sizeof(C.MDB_val{})))),
 	}
+	vv("read slot %v created with skey=%p and sval=%p", i, rs.skey, rs.sval)
+	return
 }
 func (rs *ReadSlot) free() {
 	rs.mu.Lock()

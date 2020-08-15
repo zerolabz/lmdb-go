@@ -144,10 +144,9 @@ func (c *Cursor) DBI() DBI {
 //
 // See mdb_cursor_get.
 func (c *Cursor) Get(setkey, setval []byte, op uint) (key, val []byte, err error) {
-	// debug stuff, next 3 lines
 	c.txn.readSlot.mu.Lock()
 	vv("Cursor.Get called by gid=%v with slot %v", curGID(), c.txn.readSlot.slot)
-	c.txn.readSlot.mu.Unlock()
+	defer c.txn.readSlot.mu.Unlock()
 
 	c.txn.readSlot.confirmOwned()
 	switch {
@@ -175,7 +174,7 @@ func (c *Cursor) Get(setkey, setval []byte, op uint) (key, val []byte, err error
 			key = p
 		}
 	} else {
-		if c.txn.readSlot.skey == nil { // read race here while deallocating.
+		if c.txn.readSlot.skey == nil {
 			panic("huh? why is c.txn.skey nil?")
 		}
 		key = c.txn.bytes(c.txn.readSlot.skey)
@@ -205,8 +204,10 @@ func (c *Cursor) getVal0(op uint) error {
 //
 // See mdb_cursor_get.
 func (c *Cursor) getVal1(setkey []byte, op uint) error {
-	key := c.txn.readSlot.skey
-	val := c.txn.readSlot.sval
+	rs := c.txn.readSlot
+	key := rs.skey
+	val := rs.sval
+	vv("getVal1, skey=%p, sval=%p for slot %v", rs.skey, rs.sval, rs.slot)
 	cur := c._c
 	ret := C.lmdbgo_mdb_cursor_get1(
 		cur,
@@ -223,8 +224,9 @@ func (c *Cursor) getVal1(setkey []byte, op uint) error {
 //
 // See mdb_cursor_get.
 func (c *Cursor) getVal2(setkey, setval []byte, op uint) error {
-	key := c.txn.readSlot.skey
-	val := c.txn.readSlot.sval
+	rs := c.txn.readSlot
+	key := rs.skey
+	val := rs.sval
 	cur := c._c
 	ret := C.lmdbgo_mdb_cursor_get2(
 		cur,
