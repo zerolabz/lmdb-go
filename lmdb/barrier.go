@@ -159,6 +159,8 @@ func (b *Barrier) UnblockReaders() {
 // at the gate before call returns.
 // A count of < 0 will return immediately and raise
 // the barrier to any number of arriving readers.
+// A count of 0 is a no-op.
+//
 // Otherwise we raise the barrier
 // and wait until we have seen count other goroutines waiting
 // on it.
@@ -166,6 +168,9 @@ func (b *Barrier) UnblockReaders() {
 // We return without releasing the waiters. Call
 // Open when you want them to resume.
 func (b *Barrier) BlockUntil(count int) {
+	if count == 0 {
+		return
+	}
 	req := newBlockReq(count)
 	b.blockReqCh <- req
 	if count > 0 {
