@@ -7,44 +7,54 @@ import (
 // Barrier allows us to temporarily halt all readers, so that
 // a writer can commit alone and thus compact the db.
 // The Barrier starts unblocked, alllowing passage to any
-// caller of WaitForGate(). Writers can BlockGate()
-// and then wait for a minimum number of waiters by
-// calling UnblockGate with a waitCount of the number
-// of waiters to require being present before they are
-// all released. A waitCount of 0 will release the
-// gate immediately and return. A waitCount > 0 means
-// that UnblockGate will wait until a count of goroutines
-// at WaitForGate has reached >= the waitCount.
+// caller of WaitForGate().
 type Barrier struct {
 	mu   sync.Mutex
-	cond sync.Cond
+	gate sync.Cond
 
 	blocked bool
 
-	waitlist []int
+	waitlist map[int]bool
 }
 
 func NewBarrier() (b *Barrier) {
 	b = &Barrier{
-		fleetsz: fleetsz,
+		waitlist: make(map[int]bool),
 	}
-	b.cond = sync.NewCond(b.mu)
+	b.gate = sync.NewCond(b.mu)
 	return
 }
 
-func (b *Barrier) WaitForGate() {
+func (b *Barrier) WaitForGate(id int) {
 	b.mu.Lock()
+	queued := false
 	for b.blocked {
-		b.cond.Wait()
+		if !queued {
+			b.waitlist[id] = true
+			queued = true
+		}
+		b.gate.Wait()
 	}
+	delete(b.waitlist, id)
 	b.mu.Unlock()
 }
 
-func (b *Barrier) UnblockGate(waitCount int) {
+func (b *Barrier) UnblockGate() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.blocked = false
-	b.cond.Broadcast()
+	b.gate.Broadcast()
+}
+
+// WaitUntilCountAtGate is called with a count, the
+// number of waiters required to be present and waiting
+// at the gate before call returns.
+// A count of <= 0 will return immediately without
+// checking the barrier.
+func (b *Barrier) WaitUntilCountAtGate(count int) {
+	if count <= 0 {
+		return
+	}
 }
 
 func (b *Barrier) BlockGate() {
