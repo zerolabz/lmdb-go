@@ -61,7 +61,7 @@ type Txn struct {
 	env  *Env
 	_txn *C.MDB_txn
 
-	// ReadSlot has key and val
+	// ReadSlot has skey and sval
 	ReadSlot
 
 	errLogf func(format string, v ...interface{})
@@ -224,6 +224,10 @@ func (txn *Txn) clearTxn() {
 	// Clear the C object to prevent any potential future use of the freed
 	// pointer.
 	txn._txn = nil
+
+	if txn.readonly {
+		txn.env.ReturnReadSlot(&txn.ReadSlot)
+	}
 
 	// Clear txn.id because it no longer matches the value of txn._txn (and
 	// future calls to txn.ID() should not see the stale id).  Instead of

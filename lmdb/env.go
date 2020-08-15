@@ -100,9 +100,11 @@ type ReadSlot struct {
 func (env *Env) GetOrWaitForReadSlot(rs *ReadSlot) {
 	env.rkeyMu.Lock()
 	for len(env.rkeyAvail) == 0 {
+		//vv("waiting for slot")
 		env.rkeyCond.Wait()
 	}
 	i := env.rkeyAvail[0]
+	//vv("got slot i=%v at\n%v", i, stack())
 	env.rkeyAvail = env.rkeyAvail[1:]
 	rs.skey = env.rkey[i]
 	rs.sval = env.rval[i]
@@ -119,6 +121,7 @@ func (env *Env) GetOrWaitForReadSlot(rs *ReadSlot) {
 func (env *Env) ReturnReadSlot(rs *ReadSlot) {
 	env.rkeyMu.Lock()
 	env.rkeyAvail = append(env.rkeyAvail, rs.slot)
+	//vv("returned slot i = %v", rs.slot)
 	env.rkeyMu.Unlock()
 	env.rkeyCond.Signal()
 }
