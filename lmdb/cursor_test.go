@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"runtime"
 	"testing"
+	"time"
 )
 
 func TestCursor_Txn(t *testing.T) {
@@ -887,4 +888,62 @@ func BenchmarkCursor_Renew(b *testing.B) {
 
 		return nil
 	})
+}
+
+func TestConcurrentReadingAndWriting(t *testing.T) {
+	env := setup(t)
+	defer clean(env, t)
+
+	var dbi DBI
+	err := env.Update(func(txn *Txn) (err error) {
+		dbi, err = txn.OpenDBI("testdb", Create)
+		return err
+	})
+	panicOn(err)
+
+	err = env.Update(func(txn *Txn) (err error) {
+		put := func(k, v []byte) {
+			if err == nil {
+				err = txn.Put(dbi, k, v, 0)
+			}
+		}
+		put([]byte("k1"), []byte("v1"))
+		put([]byte("k2"), []byte("v2"))
+		put([]byte("k3"), []byte("v3"))
+		put([]byte("k4"), []byte("v4"))
+		put([]byte("k5"), []byte("v5"))
+		return err
+	})
+	if err != nil {
+		t.Errorf("%s", err)
+	}
+
+	// start goroutines that are constantly reading
+	// from a cursor
+	reader := func(i int) {
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
+
+		txn, err := env.NewRawReadTxn()
+		panicOn(err)
+
+		cur, err := txn.OpenCursor(dbi)
+		panicOn(err)
+		defer cur.Close()
+
+		for {
+			k, v, err := cur.Get([]byte(""), nil, SetRange)
+			panicOn(err)
+			vv("reader i=%v  sees key:'%v' -> val:'%v'", i, k, v)
+			time.Sleep(time.Millisecond * 500)
+		}
+	}
+
+	go reader(0)
+
+	writer := func() {
+		// add one and delete one
+	}
+	_ = writer
+	select {}
 }

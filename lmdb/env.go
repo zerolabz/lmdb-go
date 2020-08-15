@@ -130,7 +130,9 @@ func (env *Env) ReturnReadSlot(rs *ReadSlot) {
 //
 // It defaults to 256 concurrent readers max. If
 // you want more or fewer, use NewEnvMaxReaders()
-// and specify the limit.
+// and specify the limit. Readers over the limit
+// will block in GetOrWaitForReadSlot until a
+// slot becomes available.
 //
 // See mdb_env_create.
 func NewEnv() (*Env, error) {
@@ -505,6 +507,22 @@ func (env *Env) BeginTxn(parent *Txn, flags uint) (*Txn, error) {
 		runtime.SetFinalizer(txn, func(v interface{}) { v.(*Txn).finalize() })
 	}
 	return txn, err
+}
+
+func (env *Env) NewReadTxn() (*Txn, error) {
+	return env.BeginTxn(nil, Readonly)
+}
+
+func (env *Env) NewRawReadTxn() (tx *Txn, err error) {
+	tx, err = env.BeginTxn(nil, Readonly)
+	if tx != nil {
+		tx.RawRead = true
+	}
+	return
+}
+
+func (env *Env) NewWriteTxn() (*Txn, error) {
+	return env.BeginTxn(nil, 0)
 }
 
 // RunTxn creates a new Txn and calls fn with it as an argument.  Run commits
