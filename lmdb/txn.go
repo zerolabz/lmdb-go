@@ -413,11 +413,9 @@ func (txn *Txn) Get(dbi DBI, key []byte) ([]byte, error) {
 	)
 	err := operrno("mdb_get", ret)
 	if err != nil {
-		//jea no! *txn.val = C.MDB_val{}
 		return nil, err
 	}
 	b := txn.bytes(txn.sval)
-	// jea no! *txn.val = C.MDB_val{}
 	return b, nil
 }
 
@@ -465,11 +463,9 @@ func (txn *Txn) PutReserve(dbi DBI, key []byte, n int, flags uint) ([]byte, erro
 	)
 	err := operrno("mdb_put", ret)
 	if err != nil {
-		//jea no! *txn.val = C.MDB_val{}
 		return nil, err
 	}
 	b := getBytes(txn.sval)
-	// jea no! *txn.val = C.MDB_val{}
 	return b, nil
 }
 

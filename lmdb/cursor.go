@@ -176,12 +176,6 @@ func (c *Cursor) Get(setkey, setval []byte, op uint) (key, val []byte, err error
 		key = c.txn.bytes(c.txn.skey)
 	}
 	val = c.txn.bytes(c.txn.sval)
-
-	// Clear transaction storage record storage area for future use and to
-	// prevent dangling references.
-	// jea: No... Let the cursor keep using it for the next get.
-	//c.txn.env.ReturnReadSlot(&txn.ReadSlot)
-
 	return key, val, nil
 }
 
@@ -284,8 +278,6 @@ func (c *Cursor) PutReserve(key []byte, n int, flags uint) ([]byte, error) {
 		return nil, err
 	}
 	b := getBytes(c.txn.sval)
-	// jea no!
-	//*c.txn.val = C.MDB_val{}
 	return b, nil
 }
 
