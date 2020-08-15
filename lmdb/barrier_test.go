@@ -29,12 +29,8 @@ func TestBarrierHolds(t *testing.T) {
 	}
 	//vv("good: barrier started open")
 
-	seenAll := make(chan bool)
-	go func() {
-		b.BlockUntil(4)
-		//vv("we have seen 4 waiters")
-		close(seenAll)
-	}()
+	//seenAll := make(chan bool)
+	b.BlockAllReadersNoWait()
 	for i := 0; i < 3; i++ {
 		go waiter(i)
 	}
@@ -46,8 +42,6 @@ func TestBarrierHolds(t *testing.T) {
 	}
 	//vv("good: barrier of 4 did not release on 3")
 	go waiter(4)
-	<-seenAll
-	//vv("good: barrier of 4 counted all 4")
 
 	time.Sleep(time.Second)
 	r = atomic.SwapInt64(&released, 0)
