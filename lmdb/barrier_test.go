@@ -52,7 +52,7 @@ func TestBarrierHolds(t *testing.T) {
 	time.Sleep(time.Second)
 	r = atomic.SwapInt64(&released, 0)
 	if r != 0 {
-		panic(fmt.Sprintf("bad: barrier did not hold back goro, should wait for unblock. r = %v"))
+		panic(fmt.Sprintf("bad: barrier did not hold back goro, should wait for unblock. r = %v", r))
 	}
 
 	b.UnblockReaders()
