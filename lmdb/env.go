@@ -114,8 +114,12 @@ func newReadSlot(i int) *ReadSlot {
 func (rs *ReadSlot) free() {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
-	rs.refCount = -1
-	rs.owner = 0 // not owned
+	if rs.owner != 0 {
+		panic(fmt.Sprintf("should not be in ReadSlot.free() with slot still owned by gid=%v", rs.owner))
+	}
+	if rs.refCount != 0 {
+		panic(fmt.Sprintf("should not be in ReadSlot.free() with slot having non-zero refCount = %v", rs.refCount))
+	}
 	C.free(unsafe.Pointer(rs.skey))
 	rs.skey = nil
 	C.free(unsafe.Pointer(rs.sval))
@@ -146,6 +150,7 @@ func (env *Env) GetOrWaitForReadSlot() (rs *ReadSlot, err error) {
 	}
 	rs.refCount = 1
 	rs.owner = curGID()
+	vv("slot %v now owned by gid=%v", i, rs.owner)
 	rs.mu.Unlock()
 	return
 }
@@ -155,7 +160,7 @@ func (rs *ReadSlot) confirmOwned() {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
 	if rs.owner != gid {
-		panic(fmt.Sprintf("we(gid=%v) are not the owner of this ReadSlot p=%p, gid is: %v", gid, rs, rs.owner))
+		panic(fmt.Sprintf("we(gid=%v) are not the owner of this ReadSlot %v p=%p, gid is: %v", gid, rs.slot, rs, rs.owner))
 	}
 }
 
@@ -170,9 +175,10 @@ func (env *Env) ReturnReadSlot(rs *ReadSlot) {
 
 	rs.refCount--
 	if rs.refCount == 0 {
-		rs.owner = 0 // not owned
 		env.rkeyAvail = append(env.rkeyAvail, rs.slot)
-		//vv("returned slot i = %v", rs.slot)
+		vv("returned slot i = %v  from gid=%v", rs.slot, rs.owner)
+
+		rs.owner = 0 // not owned anymore
 
 		// can't use defer because we want to signal unlocked,
 		// to avoid spinning on Cond locks and missing the wake-up signal.
@@ -769,18 +775,24 @@ func newSphynxReadWorker() *sphynxReadWorker {
 					defer close(job.done)
 					defer hlt.Done.Close()
 
+					gid := curGID()
+					job.readSlot.mu.Lock()
 					slot := job.readSlot.slot
+					vv("worker goro gid %v taking ownership of slot %v from prior owner %v", gid, slot, job.readSlow.owner)
+					job.readSlot.owner = gid
+					job.readSlot.mu.Unlock()
+
 					vv("about beginTxn with slot %v from job", slot)
 					defer vv("defer firing, done with slot %v from job", slot) // never seen
 
 					txn, err := beginTxnWithReadSlot(job.env, nil, job.flags, job.readSlot)
 					panicOn(err)
-					vv("got txn with slot %v", slot)
+					vv("called beginTxnWithReadSlot(slot %v) on gid=%v", slot, gid)
 
 					// run the read-only txn code on this safely locked
 					// to thread goroutine that allocated the txn.
 					job.err = job.f(txn, txn.readSlot.slot)
-					vv("done running function on slot %v", slot) // never reached
+					vv("done running function on slot %v gid=%v", slot, gid) // never reached
 
 					// have to do this while still on this goroutine.
 					txn.Abort() // cleanup reader

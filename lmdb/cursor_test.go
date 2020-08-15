@@ -1312,7 +1312,7 @@ func TestTwoDatabaseFilesOpenAtOnce(t *testing.T) {
 			for {
 				err := env.SphynxReader(func(txn *Txn, readslot int) (err error) {
 					panicOn(err)
-					vv("new Sphynx has readslot %v has made a new txn", readslot)
+					vv("new Sphynx has readslot %v has made a new txn, on gid=%v", readslot, curGID())
 
 					cur, err := txn.OpenCursor(dbi)
 					panicOn(err)
