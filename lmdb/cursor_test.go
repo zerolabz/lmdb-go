@@ -1025,12 +1025,27 @@ func TestConcurrentReadingAndWriting(t *testing.T) {
 
 			for i := 0; i < 3e5; i++ {
 
-				kx := rand.Intn(100)
-				vx := rand.Intn(100)
+				kx := rand.Intn(10)
 				k := []byte(fmt.Sprintf("writers_k%v", kx))
-				v := []byte(fmt.Sprintf("writers_v%v", vx))
-				err := txn.Put(dbi, k, v, 0)
-				panicOn(err)
+				v := []byte(fmt.Sprintf("writers_v%v", kx))
+
+				// 50/50 put or delete
+				rnd := rand.Intn(10)
+				switch rnd {
+				default:
+					err := txn.Put(dbi, k, v, 0)
+					panicOn(err)
+				case 1: // 10% of the time, delete
+					err := txn.Del(dbi, k, nil)
+					if IsNotFound(err) {
+						// ok, ignore. will be frequent.
+					} else {
+						panicOn(err)
+						if i%1e4 == 0 {
+							vv("writer deleted k '%v' ok", string(k))
+						}
+					}
+				}
 
 				if i%1e5 == 0 {
 					vv("writer at i=%v  sees key:'%v' -> val:'%v'", i, string(k), string(v))
