@@ -26,9 +26,13 @@ func newAppointment(id int) *appointment {
 	}
 }
 
-// NewBarrier can handled up to maxWaitCount waiting
-// goroutines waiting at the barrier.
-func NewBarrier(maxWaitCount int) (b *Barrier) {
+// NewBarrier is either open, allowing immediate passage,
+// or blocked, halting all callers at WaitForGate()
+// until the barrier is opened.
+//
+// Barrier.Close() must be called when the barrier
+// is no longer needed to avoid a goroutine leak.
+func NewBarrier() (b *Barrier) {
 	b = &Barrier{
 		wait:       make(chan *appointment), // waiters indicate they are waiting for the gate by sending here.
 		halt:       idem.NewHalter(),
@@ -37,13 +41,12 @@ func NewBarrier(maxWaitCount int) (b *Barrier) {
 	go func() {
 		defer b.halt.Done.Close()
 
-		open := true
 		var waitlist []*appointment
 		var curBlockReq *blockReq
 
 		for {
 			select {
-			case br := <-b.block:
+			case br := <-b.blockReqCh:
 				if br.count == 0 {
 					close(br.done)
 					continue
@@ -88,18 +91,9 @@ func (b *Barrier) WaitForGate(id int) {
 	}
 }
 
-func (b *Barrier) UnblockGate() {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	// hold mu to avoid the double close
-	select {
-	case <-b.gate:
-		// already open
-	default:
-		b.unprotectedEmptyWaitRoom()
-		// open the gate, releasing all waiting goroutines.
-		close(b.gate)
-	}
+func (b *Barrier) Close() {
+	b.halt.ReqStop.Close()
+	<-b.halt.Done.Chan
 }
 
 // BlockAndWaitUntilCountAtGate is called with a count, the
