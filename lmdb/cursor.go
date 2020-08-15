@@ -144,6 +144,7 @@ func (c *Cursor) DBI() DBI {
 //
 // See mdb_cursor_get.
 func (c *Cursor) Get(setkey, setval []byte, op uint) (key, val []byte, err error) {
+	vv("Cursor.Get called with slot %v", c.txn.readSlot.slot)
 	switch {
 	case len(setkey) == 0:
 		err = c.getVal0(op)
@@ -170,12 +171,12 @@ func (c *Cursor) Get(setkey, setval []byte, op uint) (key, val []byte, err error
 			key = p
 		}
 	} else {
-		if c.txn.skey == nil {
+		if c.txn.readSlot.skey == nil {
 			panic("huh? why is c.txn.skey nil?")
 		}
-		key = c.txn.bytes(c.txn.skey)
+		key = c.txn.bytes(c.txn.readSlot.skey)
 	}
-	val = c.txn.bytes(c.txn.sval)
+	val = c.txn.bytes(c.txn.readSlot.sval)
 	return key, val, nil
 }
 
@@ -184,8 +185,8 @@ func (c *Cursor) Get(setkey, setval []byte, op uint) (key, val []byte, err error
 //
 // See mdb_cursor_get.
 func (c *Cursor) getVal0(op uint) error {
-	key := c.txn.skey
-	val := c.txn.sval
+	key := c.txn.readSlot.skey
+	val := c.txn.readSlot.sval
 	cur := c._c
 	ret := C.mdb_cursor_get(
 		cur,
@@ -200,8 +201,8 @@ func (c *Cursor) getVal0(op uint) error {
 //
 // See mdb_cursor_get.
 func (c *Cursor) getVal1(setkey []byte, op uint) error {
-	key := c.txn.skey
-	val := c.txn.sval
+	key := c.txn.readSlot.skey
+	val := c.txn.readSlot.sval
 	cur := c._c
 	ret := C.lmdbgo_mdb_cursor_get1(
 		cur,
@@ -218,8 +219,8 @@ func (c *Cursor) getVal1(setkey []byte, op uint) error {
 //
 // See mdb_cursor_get.
 func (c *Cursor) getVal2(setkey, setval []byte, op uint) error {
-	key := c.txn.skey
-	val := c.txn.sval
+	key := c.txn.readSlot.skey
+	val := c.txn.readSlot.sval
 	cur := c._c
 	ret := C.lmdbgo_mdb_cursor_get2(
 		cur,
@@ -265,11 +266,11 @@ func (c *Cursor) PutReserve(key []byte, n int, flags uint) ([]byte, error) {
 		return nil, c.putNilKey(flags)
 	}
 
-	c.txn.sval.mv_size = C.size_t(n)
+	c.txn.readSlot.sval.mv_size = C.size_t(n)
 	ret := C.lmdbgo_mdb_cursor_put1(
 		c._c,
 		(*C.char)(unsafe.Pointer(&key[0])), C.size_t(len(key)),
-		c.txn.sval,
+		c.txn.readSlot.sval,
 		C.uint(flags|C.MDB_RESERVE),
 	)
 	err := operrno("mdb_cursor_put", ret)
@@ -277,7 +278,7 @@ func (c *Cursor) PutReserve(key []byte, n int, flags uint) ([]byte, error) {
 		// jea: no! *c.txn.val = C.MDB_val{}
 		return nil, err
 	}
-	b := getBytes(c.txn.sval)
+	b := getBytes(c.txn.readSlot.sval)
 	return b, nil
 }
 

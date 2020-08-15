@@ -86,23 +86,40 @@ type Env struct {
 
 	// keep a static pool of these, size maxReaders,
 	// to avoid a C.malloc() allocation on each read.
-	rkey []*C.MDB_val
-	rval []*C.MDB_val
+	readSlots []*ReadSlot
+
+	writeSlot *ReadSlot
 
 	//readWorker []*sphynxReadWorker // size will be maxReaders
 	readWorker *sphynxReadWorker // elastic sizing of goro pool possible?
 }
 
 type ReadSlot struct {
-	slot int
-	skey *C.MDB_val
-	sval *C.MDB_val
+	slot     int
+	skey     *C.MDB_val
+	sval     *C.MDB_val
+	mu       sync.Mutex // only one user at a time, and protect refCount
+	refCount int
+}
+
+func newReadSlot(i int) *ReadSlot {
+	return &ReadSlot{
+		slot: i,
+		skey: (*C.MDB_val)(C.malloc(C.size_t(unsafe.Sizeof(C.MDB_val{})))),
+		sval: (*C.MDB_val)(C.malloc(C.size_t(unsafe.Sizeof(C.MDB_val{})))),
+	}
+}
+func (rs *ReadSlot) free() {
+	C.free(unsafe.Pointer(rs.skey))
+	rs.skey = nil
+	C.free(unsafe.Pointer(rs.sval))
+	rs.sval = nil
 }
 
 // GetOrWaitForReadSlot() returns when it has filled
 // in the values of rs to be usable. ReturnReadSlot
 // must be called with rs again when done reading.
-func (env *Env) GetOrWaitForReadSlot(rs *ReadSlot) error {
+func (env *Env) GetOrWaitForReadSlot() (rs *ReadSlot, err error) {
 	env.rkeyMu.Lock()
 	defer env.rkeyMu.Unlock()
 
@@ -115,10 +132,12 @@ func (env *Env) GetOrWaitForReadSlot(rs *ReadSlot) error {
 	}
 	i := env.rkeyAvail[0]
 	env.rkeyAvail = env.rkeyAvail[1:]
-	rs.skey = env.rkey[i]
-	rs.sval = env.rval[i]
-	rs.slot = i
-	return nil
+	rs = env.readSlots[i]
+	rs.refCount = 1
+	//	rs.skey = env.rkey[i]
+	//	rs.sval = env.rval[i]
+	//	rs.slot = i
+	return
 }
 
 // ReturnReadSlot must be called after the reader is
@@ -128,10 +147,22 @@ func (env *Env) GetOrWaitForReadSlot(rs *ReadSlot) error {
 // maxReaders parameter.
 func (env *Env) ReturnReadSlot(rs *ReadSlot) {
 	env.rkeyMu.Lock()
-	env.rkeyAvail = append(env.rkeyAvail, rs.slot)
-	//vv("returned slot i = %v", rs.slot)
+	rs.mu.Lock()
+
+	rs.refCount--
+	if rs.refCount == 0 {
+		env.rkeyAvail = append(env.rkeyAvail, rs.slot)
+		//vv("returned slot i = %v", rs.slot)
+
+		// can't use defer because we want to signal unlocked,
+		// to avoid spinning on Cond locks and missing the wake-up signal.
+		rs.mu.Unlock()
+		env.rkeyMu.Unlock()
+		env.rkeyCond.Signal()
+		return
+	}
+	rs.mu.Unlock()
 	env.rkeyMu.Unlock()
-	env.rkeyCond.Signal()
 }
 
 // NewEnv allocates and initializes a new Env.
@@ -151,20 +182,15 @@ func NewEnvMaxReaders(maxReaders int) (*Env, error) {
 	env := &Env{
 		wkey:       (*C.MDB_val)(C.malloc(C.size_t(unsafe.Sizeof(C.MDB_val{})))),
 		wval:       (*C.MDB_val)(C.malloc(C.size_t(unsafe.Sizeof(C.MDB_val{})))),
-		rkey:       make([]*C.MDB_val, maxReaders),
-		rval:       make([]*C.MDB_val, maxReaders),
+		readSlots:  make([]*ReadSlot, maxReaders),
+		writeSlot:  newReadSlot(-1),
 		rkeyAvail:  make([]int, maxReaders, maxReaders),
 		maxReaders: maxReaders,
-		//readWorker: make([]*sphynxReadWorker, maxReaders),
 		readWorker: newSphynxReadWorker(),
 	}
 	for i := 0; i < maxReaders; i++ {
-		env.rkey[i] = (*C.MDB_val)(C.malloc(C.size_t(unsafe.Sizeof(C.MDB_val{}))))
-		env.rval[i] = (*C.MDB_val)(C.malloc(C.size_t(unsafe.Sizeof(C.MDB_val{}))))
+		env.readSlots[i] = newReadSlot(i)
 		env.rkeyAvail[i] = i
-
-		// start maxReaders goroutines.
-		//env.readWorker[i] = newSphynxReadWorker()
 	}
 	env.rkeyCond = sync.NewCond(&env.rkeyMu)
 
@@ -172,8 +198,6 @@ func NewEnvMaxReaders(maxReaders int) (*Env, error) {
 	if ret != success {
 		return nil, operrno("mdb_env_create", ret)
 	}
-	env.wkey = (*C.MDB_val)(C.malloc(C.size_t(unsafe.Sizeof(C.MDB_val{}))))
-	env.wval = (*C.MDB_val)(C.malloc(C.size_t(unsafe.Sizeof(C.MDB_val{}))))
 
 	runtime.SetFinalizer(env, (*Env).Close)
 	return env, nil
@@ -264,16 +288,10 @@ func (env *Env) close() bool {
 	env._env = nil
 	env.closeLock.Unlock()
 
-	C.free(unsafe.Pointer(env.wkey))
-	C.free(unsafe.Pointer(env.wval))
-	env.wkey = nil
-	env.wval = nil
+	env.writeSlot.free()
 
 	for i := 0; i < env.maxReaders; i++ {
-		C.free(unsafe.Pointer(env.rkey[i]))
-		env.rkey[i] = nil
-		C.free(unsafe.Pointer(env.rval[i]))
-		env.rval[i] = nil
+		env.readSlots[i].free()
 	}
 
 	return true
@@ -718,17 +736,23 @@ func newSphynxReadWorker() *sphynxReadWorker {
 					defer runtime.UnlockOSThread()
 					defer close(job.done)
 
-					vv("about beginTxn with slot %v from job", job.readSlot.slot)
-					defer vv("done with slot %v from job", job.readSlot.slot)
+					slot := job.readSlot.slot
+					vv("about beginTxn with slot %v from job", slot)
+					defer vv("defer firing, done with slot %v from job", slot) // never seen
+
 					txn, err := beginTxnWithReadSlot(job.env, nil, job.flags, &job.readSlot)
 					panicOn(err)
+					vv("got txn with slot %v", slot)
 
 					// run the read-only txn code on this safely locked
 					// to thread goroutine that allocated the txn.
-					job.err = job.f(txn, txn.slot)
+					job.err = job.f(txn, txn.readSlot.slot)
+					vv("done running function on slot %v", slot) // never reached
 
 					// have to do this while still on this goroutine.
 					txn.Abort() // cleanup reader
+
+					vv("done running function on slot %v", slot)
 				}()
 			}
 		}

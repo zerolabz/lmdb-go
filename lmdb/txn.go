@@ -63,7 +63,7 @@ type Txn struct {
 
 	// ReadSlot has skey and sval; only used for Readonly txn.
 	// Preallocated at process start, the slots are fixed in size.
-	ReadSlot
+	readSlot *ReadSlot
 
 	errLogf func(format string, v ...interface{})
 }
@@ -75,36 +75,51 @@ func beginTxn(env *Env, parent *Txn, flags uint) (*Txn, error) {
 }
 
 func beginTxnWithReadSlot(env *Env, parent *Txn, flags uint, rs *ReadSlot) (*Txn, error) {
+	write := (flags&Readonly == 0)
 	txn := &Txn{
-		readonly: (flags&Readonly != 0),
+		readonly: !write,
 		env:      env,
 	}
 
 	var ptxn *C.MDB_txn
-	if rs == nil {
+	if write {
+		if rs != nil {
+			panic("do not reserver a ReadSlot for write txn!")
+		}
+		if parent.readonly {
+			panic("cannot have child writer of read-only parent")
+		}
+		// use the one writeSlot, unless we are using parent's slot.
 		if parent == nil {
-			if flags&Readonly == 0 {
-				// In a write Txn we can use the shared, C-allocated key and value
-				// allocated by env, and freed when it is closed.
-				txn.skey = env.wkey
-				txn.sval = env.wval
-			} else {
-				err := env.GetOrWaitForReadSlot(&txn.ReadSlot)
+			txn.readSlot = env.writeSlot
+		} else {
+			txn.readSlot.mu.Lock()
+			txn.readSlot = parent.readSlot
+			txn.readSlot.refCount++ // know when we can deallocate it.
+			txn.readSlot.mu.Unlock()
+		}
+	} else {
+		// read-only txn
+		if rs == nil {
+			if parent == nil {
+				err := env.GetOrWaitForReadSlot(txn.readSlot)
 				if err != nil {
 					return nil, err
 				}
+			} else {
+				// Because parent Txn objects cannot be used while a sub-Txn is active
+				// it is OK for them to share their C.MDB_val objects.
+				ptxn = parent._txn
+				txn.readSlot.mu.Lock()
+				txn.readSlot = parent.readSlot
+				txn.readSlot.refCount++ // know when we can deallocate it.
+				txn.readSlot.mu.Unlock()
 			}
 		} else {
-			// Because parent Txn objects cannot be used while a sub-Txn is active
-			// it is OK for them to share their C.MDB_val objects.
-			ptxn = parent._txn
-			txn.skey = parent.skey
-			txn.sval = parent.sval
-		}
-	} else {
-		txn.ReadSlot = *rs
-		if parent != nil {
-			ptxn = parent._txn
+			txn.ReadSlot = *rs
+			if parent != nil {
+				ptxn = parent._txn
+			}
 		}
 	}
 	ret := C.mdb_txn_begin(env._env, ptxn, C.uint(flags), &txn._txn)
@@ -429,13 +444,13 @@ func (txn *Txn) Get(dbi DBI, key []byte) ([]byte, error) {
 	ret := C.lmdbgo_mdb_get(
 		txn._txn, C.MDB_dbi(dbi),
 		(*C.char)(unsafe.Pointer(&kdata[0])), C.size_t(kn),
-		txn.sval,
+		txn.readSlot.sval,
 	)
 	err := operrno("mdb_get", ret)
 	if err != nil {
 		return nil, err
 	}
-	b := txn.bytes(txn.sval)
+	b := txn.bytes(txn.readSlot.sval)
 	return b, nil
 }
 
@@ -474,18 +489,18 @@ func (txn *Txn) PutReserve(dbi DBI, key []byte, n int, flags uint) ([]byte, erro
 	if len(key) == 0 {
 		return nil, txn.putNilKey(dbi, flags)
 	}
-	txn.sval.mv_size = C.size_t(n)
+	txn.readSlot.sval.mv_size = C.size_t(n)
 	ret := C.lmdbgo_mdb_put1(
 		txn._txn, C.MDB_dbi(dbi),
 		(*C.char)(unsafe.Pointer(&key[0])), C.size_t(len(key)),
-		txn.sval,
+		txn.readSlot.sval,
 		C.uint(flags|C.MDB_RESERVE),
 	)
 	err := operrno("mdb_put", ret)
 	if err != nil {
 		return nil, err
 	}
-	b := getBytes(txn.sval)
+	b := getBytes(txn.readSlot.sval)
 	return b, nil
 }
 
