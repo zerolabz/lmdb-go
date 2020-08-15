@@ -74,9 +74,9 @@ func beginTxn(env *Env, parent *Txn, flags uint) (*Txn, error) {
 	return beginTxnWithReadSlot(env, parent, flags, nil)
 }
 
-func beginTxnWithReadSlot(env *Env, parent *Txn, flags uint, rs *ReadSlot) (*Txn, error) {
+func beginTxnWithReadSlot(env *Env, parent *Txn, flags uint, rs *ReadSlot) (txn *Txn, err error) {
 	write := (flags&Readonly == 0)
-	txn := &Txn{
+	txn = &Txn{
 		readonly: !write,
 		env:      env,
 	}
@@ -86,7 +86,7 @@ func beginTxnWithReadSlot(env *Env, parent *Txn, flags uint, rs *ReadSlot) (*Txn
 		if rs != nil {
 			panic("do not reserver a ReadSlot for write txn!")
 		}
-		if parent.readonly {
+		if parent != nil && parent.readonly {
 			panic("cannot have child writer of read-only parent")
 		}
 		// use the one writeSlot, unless we are using parent's slot.
@@ -102,7 +102,7 @@ func beginTxnWithReadSlot(env *Env, parent *Txn, flags uint, rs *ReadSlot) (*Txn
 		// read-only txn
 		if rs == nil {
 			if parent == nil {
-				err := env.GetOrWaitForReadSlot(txn.readSlot)
+				txn.readSlot, err = env.GetOrWaitForReadSlot()
 				if err != nil {
 					return nil, err
 				}
@@ -116,7 +116,8 @@ func beginTxnWithReadSlot(env *Env, parent *Txn, flags uint, rs *ReadSlot) (*Txn
 				txn.readSlot.mu.Unlock()
 			}
 		} else {
-			txn.ReadSlot = *rs
+			// read-only, have rs; not re-using parent's slot.
+			txn.readSlot = rs
 			if parent != nil {
 				ptxn = parent._txn
 			}
@@ -256,8 +257,8 @@ func (txn *Txn) clearTxn() {
 	txn._txn = nil
 
 	if txn.readonly {
-		vv("clearTx is returning read slot %v", txn.ReadSlot.slot)
-		txn.env.ReturnReadSlot(&txn.ReadSlot)
+		vv("clearTx is returning read slot %v", txn.readSlot.slot)
+		txn.env.ReturnReadSlot(txn.readSlot)
 	}
 
 	// Clear txn.id because it no longer matches the value of txn._txn (and

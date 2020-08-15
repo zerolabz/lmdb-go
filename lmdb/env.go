@@ -111,7 +111,7 @@ func newReadSlot(i int) *ReadSlot {
 }
 func (rs *ReadSlot) free() {
 	C.free(unsafe.Pointer(rs.skey))
-	rs.skey = nil
+	rs.skey = nil // write race here
 	C.free(unsafe.Pointer(rs.sval))
 	rs.sval = nil
 }
@@ -289,6 +289,9 @@ func (env *Env) close() bool {
 	env.closeLock.Unlock()
 
 	env.writeSlot.free()
+
+	env.readWorker.halt.ReqStop.Close()
+	<-env.readWorker.halt.Done.Chan
 
 	for i := 0; i < env.maxReaders; i++ {
 		env.readSlots[i].free()
@@ -672,7 +675,7 @@ type sphynxReadJob struct {
 	done     chan struct{}
 	err      error
 	flags    uint
-	readSlot ReadSlot
+	readSlot *ReadSlot
 	env      *Env
 }
 
@@ -702,7 +705,7 @@ func (env *Env) SphynxReader(srf SphynxReadFunc) (err error) {
 	job := env.newSphynxReadJob(srf)
 
 	// block until we can get a read slot
-	err = env.GetOrWaitForReadSlot(&job.readSlot)
+	job.readSlot, err = env.GetOrWaitForReadSlot()
 	panicOn(err)
 
 	//env.readWorker[job.readSlot.slot].jobsCh <- job
@@ -714,6 +717,8 @@ func (env *Env) SphynxReader(srf SphynxReadFunc) (err error) {
 type sphynxReadWorker struct {
 	jobsCh chan *sphynxReadJob
 	halt   *idem.Halter
+
+	childGoro []*idem.Halter
 }
 
 func newSphynxReadWorker() *sphynxReadWorker {
@@ -729,18 +734,26 @@ func newSphynxReadWorker() *sphynxReadWorker {
 		for {
 			select {
 			case <-w.halt.ReqStop.Chan:
+				vv("read worker sees shutdown request, waiting on any child goro")
+				for _, h := range w.childGoro {
+					h.ReqStop.Close()
+					<-h.Done.Chan
+				}
 				return
 			case job := <-w.jobsCh:
-				go func() {
+				hlt := idem.NewHalter()
+				w.childGoro = append(w.childGoro, hlt)
+				go func(hlt *idem.Halter) {
 					runtime.LockOSThread()
 					defer runtime.UnlockOSThread()
 					defer close(job.done)
+					defer hlt.Done.Close()
 
 					slot := job.readSlot.slot
 					vv("about beginTxn with slot %v from job", slot)
 					defer vv("defer firing, done with slot %v from job", slot) // never seen
 
-					txn, err := beginTxnWithReadSlot(job.env, nil, job.flags, &job.readSlot)
+					txn, err := beginTxnWithReadSlot(job.env, nil, job.flags, job.readSlot)
 					panicOn(err)
 					vv("got txn with slot %v", slot)
 
@@ -753,7 +766,7 @@ func newSphynxReadWorker() *sphynxReadWorker {
 					txn.Abort() // cleanup reader
 
 					vv("done running function on slot %v", slot)
-				}()
+				}(hlt)
 			}
 		}
 	}()

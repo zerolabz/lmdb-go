@@ -1268,9 +1268,13 @@ func TestTwoDatabaseFilesOpenAtOnce(t *testing.T) {
 
 		// cleanup
 		defer func() {
+			r := recover()
+			if r != nil {
+				vv("cleanup func running on panic: '%v'", r)
+			}
 			path, err := env.Path()
 			panicOn(err)
-			err = env.Close()
+			err = env.Close() // during cleanup, not all txn are finished!!
 			panicOn(err)
 
 			if path != "" {

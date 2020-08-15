@@ -154,7 +154,6 @@ func (c *Cursor) Get(setkey, setval []byte, op uint) (key, val []byte, err error
 		err = c.getVal2(setkey, setval, op)
 	}
 	if err != nil {
-		//c.txn.env.ReturnReadSlot(&txn.ReadSlot)
 		return nil, nil, err
 	}
 
@@ -171,7 +170,7 @@ func (c *Cursor) Get(setkey, setval []byte, op uint) (key, val []byte, err error
 			key = p
 		}
 	} else {
-		if c.txn.readSlot.skey == nil {
+		if c.txn.readSlot.skey == nil { // read race here while deallocating.
 			panic("huh? why is c.txn.skey nil?")
 		}
 		key = c.txn.bytes(c.txn.readSlot.skey)
