@@ -307,6 +307,7 @@ func (env *Env) ReaderCheck() (int, error) {
 
 func (env *Env) close() bool {
 	env.closeLock.Lock()
+	vv("env.close() called. stack=\n%v", stack())
 	if env._env == nil {
 		env.closeLock.Unlock()
 		return false

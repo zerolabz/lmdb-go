@@ -1266,22 +1266,24 @@ func TestTwoDatabaseFilesOpenAtOnce(t *testing.T) {
 		err = env.Open(path, myflags, 0664)
 		panicOn(err)
 
-		// cleanup
-		defer func() {
-			r := recover()
-			if r != nil {
-				vv("cleanup func running on panic: '%v'", r)
-			}
-			path, err := env.Path()
-			panicOn(err)
-			err = env.Close() // during cleanup, not all txn are finished!!
-			panicOn(err)
+		// // cleanup
+		// defer func() {
+		// 	vv("cleanup running")
+		// 	r := recover()
+		// 	if r != nil {
+		// 		vv("cleanup func running on panic: '%v'", r)
+		// 		panic(r)
+		// 	}
+		// 	path, err := env.Path()
+		// 	panicOn(err)
+		// 	err = env.Close() // during cleanup, not all txn are finished!!
+		// 	panicOn(err)
 
-			if path != "" {
-				err = os.RemoveAll(path)
-				panicOn(err)
-			}
-		}()
+		// 	if path != "" {
+		// 		err = os.RemoveAll(path)
+		// 		panicOn(err)
+		// 	}
+		// }()
 
 		var dbi DBI
 		err = env.Update(func(txn *Txn) (err error) {
@@ -1403,6 +1405,7 @@ func TestTwoDatabaseFilesOpenAtOnce(t *testing.T) {
 		}
 		go writer()
 
+		select {}
 		return env, nil
 	}
 	_ = openDB
