@@ -914,7 +914,8 @@ func TestConcurrentReadingAndWriting(t *testing.T) {
 					err = txn.Put(dbi, k, v, 0)
 				}
 			}
-			put([]byte("1"), []byte("v1"))
+			put([]byte{0}, []byte("v0"))
+			put([]byte("1big_huge_ginormous_key"), []byte("v1"))
 			put([]byte("2"), []byte("v2"))
 			put([]byte("3"), []byte("v3"))
 			put([]byte("4"), []byte("v4"))
