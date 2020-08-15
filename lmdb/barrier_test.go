@@ -1,6 +1,7 @@
 package lmdb
 
 import (
+	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -31,7 +32,7 @@ func TestBarrierHolds(t *testing.T) {
 	seenAll := make(chan bool)
 	go func() {
 		b.BlockUntil(4)
-		//vv("we have seen 4 waiters")
+		vv("we have seen 4 waiters")
 		close(seenAll)
 	}()
 	for i := 0; i < 3; i++ {
@@ -51,7 +52,7 @@ func TestBarrierHolds(t *testing.T) {
 	time.Sleep(time.Second)
 	r = atomic.SwapInt64(&released, 0)
 	if r != 0 {
-		panic("bad: barrier did not hold back goro, should wait for unblock")
+		panic(fmt.Sprintf("bad: barrier did not hold back goro, should wait for unblock. r = %v"))
 	}
 
 	b.UnblockReaders()

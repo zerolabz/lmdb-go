@@ -41,7 +41,7 @@ func newAppointment(id int) *appointment {
 
 // NewBarrier is either open, allowing immediate passage,
 // or blocked, halting all callers at WaitAtGate()
-// until the barrier is opened.
+// until the barrier is opened. By default it is open.
 //
 // Barrier.Close() must be called when the barrier
 // is no longer needed to avoid a goroutine leak.
@@ -82,7 +82,14 @@ func NewBarrier() (b *Barrier) {
 					continue
 				}
 				waitlist = append(waitlist, appt)
-				if len(waitlist) >= curBlockReq.count {
+				n := len(waitlist)
+				th := curBlockReq.count
+				if th < 0 {
+					// infinite waiters. we block everybody until we
+					// see an unblock request.
+					continue
+				}
+				if n >= th {
 					close(curBlockReq.done)
 				}
 			case ub := <-b.unblockCh:
@@ -100,6 +107,10 @@ func NewBarrier() (b *Barrier) {
 	return
 }
 
+// WaitAtGate will return immediately
+// if the barrier is unblocked. Otherwise
+// it will not return until another
+// goroutine unblocks the barrier.
 func (b *Barrier) WaitAtGate(id int) {
 	appt := newAppointment(id)
 	select {
@@ -112,6 +123,9 @@ func (b *Barrier) WaitAtGate(id int) {
 	}
 }
 
+// Close should be called to stop the
+// barrier's background goroutine when
+// you are done using the barrier.
 func (b *Barrier) Close() {
 	b.halt.ReqStop.Close()
 	<-b.halt.Done.Chan
@@ -143,16 +157,25 @@ func (b *Barrier) UnblockReaders() {
 // BlockUntil is called with a count, the
 // number of waiters required to be present and waiting
 // at the gate before call returns.
-// A count of <= 0 will return immediately without
-// checking the barrier. Otherwise we raise the barrier
+// A count of < 0 will return immediately and raise
+// the barrier to any number of arriving readers.
+// Otherwise we raise the barrier
 // and wait until we have seen count other goroutines waiting
-// on it. We return without releasing the waiters. Call
+// on it.
+//
+// We return without releasing the waiters. Call
 // Open when you want them to resume.
 func (b *Barrier) BlockUntil(count int) {
-	if count <= 0 {
-		return
-	}
 	req := newBlockReq(count)
 	b.blockReqCh <- req
 	<-req.done
+}
+
+// BlockAllReadersNoWait raises the barrier to
+// an infinite number of waiters and returns immediately
+// to the caller.
+func (b *Barrier) BlockAllReadersNoWait() {
+	req := newBlockReq(-1) // -1 means block any number of readers.
+	b.blockReqCh <- req
+	// don't wait. <-req.done
 }
