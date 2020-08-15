@@ -32,7 +32,7 @@ func TestBarrierHolds(t *testing.T) {
 	seenAll := make(chan bool)
 	go func() {
 		b.BlockUntil(4)
-		vv("we have seen 4 waiters")
+		//vv("we have seen 4 waiters")
 		close(seenAll)
 	}()
 	for i := 0; i < 3; i++ {
