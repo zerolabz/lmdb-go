@@ -3,6 +3,8 @@ package lmdb
 import (
 	"bytes"
 	"fmt"
+	"io/ioutil"
+	"math/rand"
 	"os"
 	"reflect"
 	"runtime"
@@ -892,11 +894,51 @@ func BenchmarkCursor_Renew(b *testing.B) {
 
 func TestConcurrentReadingAndWriting(t *testing.T) {
 
-	env := setup(t)
-	defer clean(env, t)
+	rand.Seed(1)
+	maxr := 1
+	env, err := NewEnvMaxReaders(maxr)
+	if err != nil {
+		t.Fatalf("env: %s", err)
+	}
+	path, err := ioutil.TempDir("", "mdb_test")
+	if err != nil {
+		t.Fatalf("tempdir: %v", err)
+	}
+	vv("temp dir '%v'", path)
+	err = os.MkdirAll(path, 0770)
+	if err != nil {
+		t.Fatalf("mkdir: %s", path)
+	}
+	err = env.SetMaxDBs(64 << 10)
+	if err != nil {
+		t.Fatalf("setmaxdbs: %v", err)
+	}
+	var myflags uint
+	err = env.Open(path, myflags, 0664)
+	if err != nil {
+		t.Fatalf("open: %s", err)
+	}
+
+	// cleanup
+	defer func() {
+		path, err := env.Path()
+		if err != nil {
+			t.Errorf("path: %v", err)
+		}
+		err = env.Close()
+		if err != nil {
+			t.Errorf("close: %s", err)
+		}
+		if path != "" {
+			err = os.RemoveAll(path)
+			if err != nil {
+				t.Errorf("remove: %v", err)
+			}
+		}
+	}()
 
 	var dbi DBI
-	err := env.Update(func(txn *Txn) (err error) {
+	err = env.Update(func(txn *Txn) (err error) {
 		dbi, err = txn.OpenDBI("testdb", Create)
 		return err
 	})
@@ -926,38 +968,50 @@ func TestConcurrentReadingAndWriting(t *testing.T) {
 		runtime.LockOSThread()
 		defer runtime.UnlockOSThread()
 
-		txn, err := env.NewRawReadTxn()
-		panicOn(err)
+		for {
+			txn, err := env.NewRawReadTxn()
+			panicOn(err)
+			vv("readerno %v has made a new txn", readno)
 
-		cur, err := txn.OpenCursor(dbi)
-		panicOn(err)
-		defer cur.Close()
+			cur, err := txn.OpenCursor(dbi)
+			panicOn(err)
 
-		for i := 0; true; i++ {
-			var k, v []byte
-			var err error
-			if i == 0 {
-				// must give it at least a zero byte here to start.
-				k, v, err = cur.Get([]byte{0}, nil, SetRange)
-				panicOn(err)
-			} else {
-				k, v, err = cur.Get([]byte("hello"), nil, Next)
-				if IsNotFound(err) {
-					vv("not found")
+			for i := 0; i < 3e5; i++ {
+				var k, v []byte
+				var err error
+				if i == 0 {
+					// must give it at least a zero byte here to start.
 					k, v, err = cur.Get([]byte{0}, nil, SetRange)
 					panicOn(err)
 				} else {
-					panicOn(err)
+					k, v, err = cur.Get([]byte("hello"), nil, Next)
+					if IsNotFound(err) {
+						//vv("not found")
+						// start over
+						k, v, err = cur.Get([]byte{0}, nil, SetRange)
+						panicOn(err)
+					} else {
+						panicOn(err)
+					}
+				}
+				_, _ = k, v
+				if i%1e5 == 0 {
+					vv("reader %v at i=%v  sees key:'%v' -> val:'%v'", readno, i, string(k), string(v))
 				}
 			}
-			vv("reader %v at i=%v  sees key:'%v' -> val:'%v'", readno, i, string(k), string(v))
-			time.Sleep(time.Millisecond * 500)
-		}
+			cur.Close()
+			txn.Abort()
+
+			pause := rand.Intn(500)
+			time.Sleep(time.Millisecond * time.Duration(pause))
+		} // endless for
 	}
 
 	go reader(0)
 	time.Sleep(250 * time.Millisecond)
 	go reader(1)
+	time.Sleep(125 * time.Millisecond)
+	go reader(2)
 
 	writer := func() {
 		// add one and delete one

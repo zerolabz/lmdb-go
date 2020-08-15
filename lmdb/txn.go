@@ -83,7 +83,11 @@ func beginTxn(env *Env, parent *Txn, flags uint) (*Txn, error) {
 			txn.skey = env.wkey
 			txn.sval = env.wval
 		} else {
-			env.GetOrWaitForReadSlot(&txn.ReadSlot)
+			err := env.GetOrWaitForReadSlot(&txn.ReadSlot)
+			if err != nil {
+				// times out if no progress in 5 seconds
+				return nil, err
+			}
 		}
 	} else {
 		// Because parent Txn objects cannot be used while a sub-Txn is active

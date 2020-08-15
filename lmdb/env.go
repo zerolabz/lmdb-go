@@ -97,20 +97,23 @@ type ReadSlot struct {
 // GetOrWaitForReadSlot() returns when it has filled
 // in the values of rs to be usable. ReturnReadSlot
 // must be called with rs again when done reading.
-func (env *Env) GetOrWaitForReadSlot(rs *ReadSlot) {
+func (env *Env) GetOrWaitForReadSlot(rs *ReadSlot) error {
 	env.rkeyMu.Lock()
+	defer env.rkeyMu.Unlock()
+
 	for len(env.rkeyAvail) == 0 {
-		//vv("waiting for slot")
+		// Wait for a ReadSlot to become available.
+		// We can block here, waiting forever if nobody else stops
+		// reading. So make sure other read transactions finish,
+		// and are as short as possible.
 		env.rkeyCond.Wait()
 	}
 	i := env.rkeyAvail[0]
-	//vv("got slot i=%v at\n%v", i, stack())
 	env.rkeyAvail = env.rkeyAvail[1:]
 	rs.skey = env.rkey[i]
 	rs.sval = env.rval[i]
 	rs.slot = i
-	env.rkeyMu.Unlock()
-	return
+	return nil
 }
 
 // ReturnReadSlot must be called after the reader is
