@@ -1,7 +1,7 @@
 package lmdb
 
 import (
-	"sync"
+	"github.com/glycerine/idem"
 )
 
 // Barrier allows us to temporarily halt all readers, so that
@@ -9,56 +9,123 @@ import (
 // The Barrier starts unblocked, alllowing passage to any
 // caller of WaitForGate().
 type Barrier struct {
-	mu   sync.Mutex
-	gate sync.Cond
-
-	blocked bool
-
-	waitlist map[int]bool
+	wait       chan *appointment // send upon entering the waiting room.
+	halt       *idem.Halter
+	blockReqCh chan *blockReq
 }
 
-func NewBarrier() (b *Barrier) {
-	b = &Barrier{
-		waitlist: make(map[int]bool),
+type appointment struct {
+	id   int
+	done chan struct{}
+}
+
+func newAppointment(id int) *appointment {
+	return &appointment{
+		id:   id,
+		done: make(chan struct{}),
 	}
-	b.gate = sync.NewCond(b.mu)
+}
+
+// NewBarrier can handled up to maxWaitCount waiting
+// goroutines waiting at the barrier.
+func NewBarrier(maxWaitCount int) (b *Barrier) {
+	b = &Barrier{
+		wait:       make(chan *appointment), // waiters indicate they are waiting for the gate by sending here.
+		halt:       idem.NewHalter(),
+		blockReqCh: make(chan *blockReq),
+	}
+	go func() {
+		defer b.halt.Done.Close()
+
+		open := true
+		var waitlist []*appointment
+		var curBlockReq *blockReq
+
+		for {
+			select {
+			case br := <-b.block:
+				if br.count == 0 {
+					close(br.done)
+					continue
+				}
+				if curBlockReq == nil {
+					// good, changing state from open to closed barrier.
+				} else {
+					panic("got 2nd block request atop of first")
+				}
+				curBlockReq = br
+				if len(waitlist) != 0 {
+					panic("had waiters when we were open, internal/client bug")
+				}
+			case appt := <-b.wait:
+				if curBlockReq == nil {
+					close(appt.done)
+					continue
+				}
+				waitlist = append(waitlist, appt)
+				if len(waitlist) >= curBlockReq.count {
+					for _, appt := range waitlist {
+						close(appt.done)
+					}
+					waitlist = nil
+					close(curBlockReq.done)
+					curBlockReq = nil
+				}
+			case <-b.halt.ReqStop.Chan:
+				return
+			}
+		}
+	}()
 	return
 }
 
 func (b *Barrier) WaitForGate(id int) {
-	b.mu.Lock()
-	queued := false
-	for b.blocked {
-		if !queued {
-			b.waitlist[id] = true
-			queued = true
-		}
-		b.gate.Wait()
+	appt := newAppointment(id)
+	select {
+	case b.wait <- appt:
+		<-appt.done
+	case <-b.halt.ReqStop.Chan:
 	}
-	delete(b.waitlist, id)
-	b.mu.Unlock()
 }
 
 func (b *Barrier) UnblockGate() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	b.blocked = false
-	b.gate.Broadcast()
-}
-
-// WaitUntilCountAtGate is called with a count, the
-// number of waiters required to be present and waiting
-// at the gate before call returns.
-// A count of <= 0 will return immediately without
-// checking the barrier.
-func (b *Barrier) WaitUntilCountAtGate(count int) {
-	if count <= 0 {
-		return
+	// hold mu to avoid the double close
+	select {
+	case <-b.gate:
+		// already open
+	default:
+		b.unprotectedEmptyWaitRoom()
+		// open the gate, releasing all waiting goroutines.
+		close(b.gate)
 	}
 }
 
-func (b *Barrier) BlockGate() {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.blocked = true
+// BlockAndWaitUntilCountAtGate is called with a count, the
+// number of waiters required to be present and waiting
+// at the gate before call returns.
+// A count of <= 0 will return immediately without
+// checking the barrier. Otherwise we raise the barrier
+// and wait until we have seen count other goroutines waiting
+// on it.
+func (b *Barrier) BlockAndWaitUntilCountAtGate(count int) {
+	if count <= 0 {
+		return
+	}
+	req := newBlockReq(count)
+	b.blockReqCh <- req
+	<-req.done
+}
+
+type blockReq struct {
+	count int
+	done  chan struct{}
+}
+
+func newBlockReq(count int) *blockReq {
+	return &blockReq{
+		count: count,
+		done:  make(chan struct{}),
+	}
 }
