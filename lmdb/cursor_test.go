@@ -1421,7 +1421,7 @@ func TestTwoDatabaseFilesOpenAtOnce(t *testing.T) {
 				pause := rand.Intn(100)
 				time.Sleep(time.Millisecond * time.Duration(pause))
 
-				barrier.Unblock()
+				barrier.UnblockReaders()
 			} // endless for
 		}
 		go writer()

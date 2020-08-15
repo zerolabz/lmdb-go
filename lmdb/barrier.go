@@ -126,7 +126,7 @@ func newUnblock() *unblock {
 }
 
 // Unblock lets all waiting goroutines resume execution.
-func (b *Barrier) Unblock() {
+func (b *Barrier) UnblockReaders() {
 	ub := newUnblock()
 	select {
 	case b.unblockCh <- ub:
