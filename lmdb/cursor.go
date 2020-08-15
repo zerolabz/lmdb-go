@@ -145,10 +145,9 @@ func (c *Cursor) DBI() DBI {
 // See mdb_cursor_get.
 func (c *Cursor) Get(setkey, setval []byte, op uint) (key, val []byte, err error) {
 	c.txn.readSlot.mu.Lock()
-	vv("Cursor.Get called by gid=%v with slot %v", curGID(), c.txn.readSlot.slot)
+	//vv("Cursor.Get called by gid=%v with slot %v", curGID(), c.txn.readSlot.slot)
 	defer c.txn.readSlot.mu.Unlock()
 
-	//c.txn.readSlot.confirmOwned() //  // deadlock here, can't debug print and lock c.txn.readSlot.mu here
 	switch {
 	case len(setkey) == 0:
 		err = c.getVal0(op)
@@ -207,7 +206,7 @@ func (c *Cursor) getVal1(setkey []byte, op uint) error {
 	rs := c.txn.readSlot
 	key := rs.skey
 	val := rs.sval
-	vv("getVal1, skey=%p, sval=%p for slot %v", rs.skey, rs.sval, rs.slot)
+	//vv("getVal1, skey=%p, sval=%p for slot %v", rs.skey, rs.sval, rs.slot)
 	cur := c._c
 	ret := C.lmdbgo_mdb_cursor_get1(
 		cur,

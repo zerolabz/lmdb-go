@@ -1323,12 +1323,12 @@ func TestTwoDatabaseFilesOpenAtOnce(t *testing.T) {
 			for {
 				err := env.SphynxReader(func(txn *Txn, readslot int) (err error) {
 					panicOn(err)
-					vv("new Sphynx has readslot %v has made a new txn, on gid=%v", readslot, curGID())
+					//vv("new Sphynx has readslot %v has made a new txn, on gid=%v", readslot, curGID())
 
 					cur, err := txn.OpenCursor(dbi)
 					panicOn(err)
 
-					for i := 0; i < 3; i++ {
+					for i := 0; i < 30; i++ {
 						var k, v []byte
 						var err error
 						if i == 0 {
@@ -1348,17 +1348,18 @@ func TestTwoDatabaseFilesOpenAtOnce(t *testing.T) {
 						}
 						_, _ = k, v
 						if i%1e4 == 0 {
-							vv("reader %v at i=%v  sees key:'%v' -> val:'%v'", readslot, i, string(k), string(v))
+							//vv("reader %v at i=%v  sees key:'%v' -> val:'%v'", readslot, i, string(k), string(v))
 						}
 					}
 					cur.Close()
 					return nil
 				})
-				vv("SphynxReader returned err='%v'", err)
+				panicOn(err)
+				//vv("SphynxReader returned err='%v'", err)
 
 				gid := curGID()
 				barrier.WaitAtGate(gid)
-				vv("reader gid %v has passed the barrierWaitAtGate", gid)
+				//vv("reader gid %v has passed the barrierWaitAtGate", gid)
 
 				pause := rand.Intn(100)
 				time.Sleep(time.Millisecond * time.Duration(pause))
@@ -1420,7 +1421,7 @@ func TestTwoDatabaseFilesOpenAtOnce(t *testing.T) {
 
 				// MDB_CORRUPTED: Located page was wrong type
 				// means that we boneheadedly closed/deleted the files while the write
-				// was in progress.
+				// was in progress, probably due to an errant defer.Close().
 
 				pause := rand.Intn(100)
 				time.Sleep(time.Millisecond * time.Duration(pause))
