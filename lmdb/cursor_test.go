@@ -1253,19 +1253,27 @@ func TestTwoDatabaseFilesOpenAtOnce(t *testing.T) {
 		rand.Seed(1)
 		maxr := 7
 		env, err := NewEnvMaxReaders(maxr)
-		if err != nil {
-			t.Fatalf("env: %s", err)
-		}
+		panicOn(err)
+		//defer env.Close()
 
 		env.SetMapSize(1 << 20) // default 1MB is too small, but catches our growth without bounds problem.
 		//err = os.MkdirAll(path, 0770)
 
-		err = env.SetMaxDBs(64 << 10)
+		err = env.SetMaxDBs(1)
 		panicOn(err)
 
 		var myflags uint = NoReadahead | NoSubdir
 		err = env.Open(path, myflags, 0664)
 		panicOn(err)
+
+		// In any real application it is important to check for readers that were
+		// never closed by their owning process, and for which the owning process
+		// has exited.  See the documentation on transactions for more information.
+		staleReaders, err := env.ReaderCheck()
+		panicOn(err)
+		if staleReaders > 0 {
+			vv("cleared %d reader slots from dead processes", staleReaders)
+		}
 
 		// // cleanup
 		// defer func() {
@@ -1307,9 +1315,7 @@ func TestTwoDatabaseFilesOpenAtOnce(t *testing.T) {
 			put([]byte("5"), []byte("v5"))
 			return err
 		})
-		if err != nil {
-			t.Errorf("%s", err)
-		}
+		panicOn(err)
 
 		reader := func() {
 			for {
@@ -1347,7 +1353,7 @@ func TestTwoDatabaseFilesOpenAtOnce(t *testing.T) {
 					return nil
 				})
 				vv("SphynxReader returned err='%v'", err)
-				pause := rand.Intn(500)
+				pause := rand.Intn(100)
 				time.Sleep(time.Millisecond * time.Duration(pause))
 
 			} // endless for
@@ -1400,7 +1406,11 @@ func TestTwoDatabaseFilesOpenAtOnce(t *testing.T) {
 				}
 				panicOn(txn.Commit())
 
-				pause := rand.Intn(500)
+				// MDB_CORRUPTED: Located page was wrong type
+				// means that we boneheadedly closed/deleted the files while the write
+				// was in progress.
+
+				pause := rand.Intn(100)
 				time.Sleep(time.Millisecond * time.Duration(pause))
 			} // endless for
 		}
