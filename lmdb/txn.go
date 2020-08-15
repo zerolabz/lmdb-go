@@ -61,7 +61,8 @@ type Txn struct {
 	env  *Env
 	_txn *C.MDB_txn
 
-	// ReadSlot has skey and sval
+	// ReadSlot has skey and sval; only used for Readonly txn.
+	// Preallocated at process start, the slots are fixed in size.
 	ReadSlot
 
 	errLogf func(format string, v ...interface{})

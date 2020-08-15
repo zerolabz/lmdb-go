@@ -89,7 +89,8 @@ type Env struct {
 	rkey []*C.MDB_val
 	rval []*C.MDB_val
 
-	readWorker []*sphynxReadWorker // size will be maxReaders
+	//readWorker []*sphynxReadWorker // size will be maxReaders
+	readWorker *sphynxReadWorker // elastic sizing of goro pool possible?
 }
 
 type ReadSlot struct {
@@ -154,7 +155,8 @@ func NewEnvMaxReaders(maxReaders int) (*Env, error) {
 		rval:       make([]*C.MDB_val, maxReaders),
 		rkeyAvail:  make([]int, maxReaders, maxReaders),
 		maxReaders: maxReaders,
-		readWorker: make([]*sphynxReadWorker, maxReaders),
+		//readWorker: make([]*sphynxReadWorker, maxReaders),
+		readWorker: newSphynxReadWorker(),
 	}
 	for i := 0; i < maxReaders; i++ {
 		env.rkey[i] = (*C.MDB_val)(C.malloc(C.size_t(unsafe.Sizeof(C.MDB_val{}))))
@@ -162,7 +164,7 @@ func NewEnvMaxReaders(maxReaders int) (*Env, error) {
 		env.rkeyAvail[i] = i
 
 		// start maxReaders goroutines.
-		env.readWorker[i] = newSphynxReadWorker()
+		//env.readWorker[i] = newSphynxReadWorker()
 	}
 	env.rkeyCond = sync.NewCond(&env.rkeyMu)
 
@@ -685,7 +687,8 @@ func (env *Env) SphynxReader(srf SphynxReadFunc) (err error) {
 	err = env.GetOrWaitForReadSlot(&job.readSlot)
 	panicOn(err)
 
-	env.readWorker[job.readSlot.slot].jobsCh <- job
+	//env.readWorker[job.readSlot.slot].jobsCh <- job
+	env.readWorker.jobsCh <- job
 	<-job.done
 	return job.err
 }
@@ -710,16 +713,21 @@ func newSphynxReadWorker() *sphynxReadWorker {
 			case <-w.halt.ReqStop.Chan:
 				return
 			case job := <-w.jobsCh:
-				txn, err := beginTxnWithReadSlot(job.env, nil, job.flags, &job.readSlot)
-				panicOn(err)
+				go func() {
+					runtime.LockOSThread()
+					defer runtime.UnlockOSThread()
+					defer close(job.done)
 
-				// run the read-only txn code on this safely locked
-				// to thread goroutine that allocated the txn.
-				job.err = job.f(txn, txn.slot)
+					txn, err := beginTxnWithReadSlot(job.env, nil, job.flags, &job.readSlot)
+					panicOn(err)
 
-				// have to do this while still on this goroutine.
-				txn.Abort() // cleanup reader
-				close(job.done)
+					// run the read-only txn code on this safely locked
+					// to thread goroutine that allocated the txn.
+					job.err = job.f(txn, txn.slot)
+
+					// have to do this while still on this goroutine.
+					txn.Abort() // cleanup reader
+				}()
 			}
 		}
 	}()
