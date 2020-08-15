@@ -1078,7 +1078,7 @@ func TestConcurrentReadingAndWriting(t *testing.T) {
 func TestSphynx(t *testing.T) {
 
 	rand.Seed(1)
-	maxr := 9
+	maxr := 7
 	env, err := NewEnvMaxReaders(maxr)
 	if err != nil {
 		t.Fatalf("env: %s", err)
@@ -1154,7 +1154,7 @@ func TestSphynx(t *testing.T) {
 				cur, err := txn.OpenCursor(dbi)
 				panicOn(err)
 
-				for i := 0; i < 10; i++ {
+				for i := 0; i < 3e5; i++ {
 					var k, v []byte
 					var err error
 					if i == 0 {
@@ -1173,35 +1173,27 @@ func TestSphynx(t *testing.T) {
 						}
 					}
 					_, _ = k, v
-					//if i%1e4 == 0 {
-					vv("reader %v at i=%v  sees key:'%v' -> val:'%v'", readslot, i, string(k), string(v))
-					//}
-
-					pause := rand.Intn(500)
-					time.Sleep(time.Millisecond * time.Duration(pause))
+					if i%1e4 == 0 {
+						vv("reader %v at i=%v  sees key:'%v' -> val:'%v'", readslot, i, string(k), string(v))
+					}
 				}
 				cur.Close()
 				return nil
 			})
 			vv("SphynxReader returned err='%v'", err)
+			pause := rand.Intn(500)
+			time.Sleep(time.Millisecond * time.Duration(pause))
+
 		} // endless for
 	} // defn reader
 
 	// start a bunch of readers, staggered
-	k := 0
-	for j := 0; j < 4; j++ {
+	for k := 0; k < 11; k++ {
+		pause := rand.Intn(121)
+		time.Sleep(time.Millisecond * time.Duration(pause))
 		go reader()
-		k++
-		time.Sleep(250 * time.Millisecond)
-		go reader()
-		k++
-		time.Sleep(125 * time.Millisecond)
-		go reader()
-		k++
-		time.Sleep(75 * time.Millisecond)
 	}
 
-	select {}
 	writer := func() {
 		// add one and delete one
 		runtime.LockOSThread()
