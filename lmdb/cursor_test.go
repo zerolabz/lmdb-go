@@ -895,7 +895,7 @@ func BenchmarkCursor_Renew(b *testing.B) {
 func TestConcurrentReadingAndWriting(t *testing.T) {
 
 	rand.Seed(1)
-	maxr := 1
+	maxr := 9
 	env, err := NewEnvMaxReaders(maxr)
 	if err != nil {
 		t.Fatalf("env: %s", err)
@@ -1002,16 +1002,25 @@ func TestConcurrentReadingAndWriting(t *testing.T) {
 			cur.Close()
 			txn.Abort()
 
+			// pause for a little, to let another reader get started.
 			pause := rand.Intn(500)
 			time.Sleep(time.Millisecond * time.Duration(pause))
 		} // endless for
 	}
 
-	go reader(0)
-	time.Sleep(250 * time.Millisecond)
-	go reader(1)
-	time.Sleep(125 * time.Millisecond)
-	go reader(2)
+	// start a bunch of readers, staggered
+	k := 0
+	for j := 0; j < 4; j++ {
+		go reader(k)
+		k++
+		time.Sleep(250 * time.Millisecond)
+		go reader(k)
+		k++
+		time.Sleep(125 * time.Millisecond)
+		go reader(k)
+		k++
+		time.Sleep(75 * time.Millisecond)
+	}
 
 	writer := func() {
 		// add one and delete one
@@ -1029,7 +1038,7 @@ func TestConcurrentReadingAndWriting(t *testing.T) {
 				k := []byte(fmt.Sprintf("writers_k%v", kx))
 				v := []byte(fmt.Sprintf("writers_v%v", kx))
 
-				// 50/50 put or delete
+				// 90/10 put or delete
 				rnd := rand.Intn(10)
 				switch rnd {
 				default:
