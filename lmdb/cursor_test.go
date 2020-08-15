@@ -1196,8 +1196,8 @@ func TestSphynx(t *testing.T) {
 
 	writer := func() {
 		// add one and delete one
-		runtime.LockOSThread()
-		defer runtime.UnlockOSThread()
+		//runtime.LockOSThread()
+		//defer runtime.UnlockOSThread()
 
 		for {
 			txn, err := env.NewWriteTxn()

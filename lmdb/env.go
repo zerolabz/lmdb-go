@@ -701,8 +701,8 @@ func newSphynxReadWorker() *sphynxReadWorker {
 		halt:   idem.NewHalter(),
 	}
 	go func() {
-		runtime.LockOSThread()
-		defer runtime.UnlockOSThread()
+		//runtime.LockOSThread()
+		//defer runtime.UnlockOSThread()
 
 		defer w.halt.Done.Close()
 		for {
