@@ -168,7 +168,9 @@ func (b *Barrier) UnblockReaders() {
 func (b *Barrier) BlockUntil(count int) {
 	req := newBlockReq(count)
 	b.blockReqCh <- req
-	<-req.done
+	if count > 0 {
+		<-req.done
+	}
 }
 
 // BlockAllReadersNoWait raises the barrier to
