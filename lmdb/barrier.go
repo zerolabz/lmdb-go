@@ -98,7 +98,10 @@ func (b *Barrier) WaitForGate(id int) {
 	appt := newAppointment(id)
 	select {
 	case b.wait <- appt:
-		<-appt.done
+		select {
+		case <-appt.done:
+		case <-b.halt.ReqStop.Chan:
+		}
 	case <-b.halt.ReqStop.Chan:
 	}
 }
