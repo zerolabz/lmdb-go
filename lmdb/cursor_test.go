@@ -1015,7 +1015,29 @@ func TestConcurrentReadingAndWriting(t *testing.T) {
 
 	writer := func() {
 		// add one and delete one
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
+
+		for {
+			txn, err := env.NewWriteTxn()
+			panicOn(err)
+			vv("writer has made a new txn", readno)
+
+			for i := 0; i < 3e5; i++ {
+				var k, v []byte
+				var err error
+				if i%1e5 == 0 {
+					vv("writer at i=%v  sees key:'%v' -> val:'%v'", readno, i, string(k), string(v))
+				}
+			}
+			cur.Close()
+			txn.Abort()
+
+			pause := rand.Intn(500)
+			time.Sleep(time.Millisecond * time.Duration(pause))
+		} // endless for
 	}
-	_ = writer
+	go writer()
+
 	select {}
 }
