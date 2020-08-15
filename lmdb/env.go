@@ -113,6 +113,7 @@ func (env *Env) GetOrWaitForReadSlot(rs *ReadSlot) error {
 		env.rkeyCond.Wait()
 	}
 	i := env.rkeyAvail[0]
+	vv("allocating read slot i=%v", i)
 	env.rkeyAvail = env.rkeyAvail[1:]
 	rs.skey = env.rkey[i]
 	rs.sval = env.rval[i]
@@ -128,7 +129,7 @@ func (env *Env) GetOrWaitForReadSlot(rs *ReadSlot) error {
 func (env *Env) ReturnReadSlot(rs *ReadSlot) {
 	env.rkeyMu.Lock()
 	env.rkeyAvail = append(env.rkeyAvail, rs.slot)
-	//vv("returned slot i = %v", rs.slot)
+	vv("returned slot i = %v", rs.slot)
 	env.rkeyMu.Unlock()
 	env.rkeyCond.Signal()
 }
@@ -681,6 +682,8 @@ func (env *Env) SphynxReader(srf SphynxReadFunc) (err error) {
 	// block until we can get a read slot
 	err = env.GetOrWaitForReadSlot(&job.readSlot)
 	panicOn(err)
+
+	vv("got read slot %#v for job %p", job.readSlot, job)
 
 	env.readWorker.jobsCh <- job
 	<-job.done

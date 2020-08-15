@@ -200,6 +200,7 @@ func (c *Cursor) getVal0(op uint) error {
 //
 // See mdb_cursor_get.
 func (c *Cursor) getVal1(setkey []byte, op uint) error {
+	vv("using c.txn.ReadSlot = %p, '%#v'", &c.txn.ReadSlot, c.txn.ReadSlot)
 	key := c.txn.skey
 	val := c.txn.sval
 	cur := c._c
