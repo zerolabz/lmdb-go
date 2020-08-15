@@ -914,11 +914,11 @@ func TestConcurrentReadingAndWriting(t *testing.T) {
 					err = txn.Put(dbi, k, v, 0)
 				}
 			}
-			put([]byte("k1"), []byte("v1"))
-			put([]byte("k2"), []byte("v2"))
-			put([]byte("k3"), []byte("v3"))
-			put([]byte("k4"), []byte("v4"))
-			put([]byte("k5"), []byte("v5"))
+			put([]byte("1"), []byte("v1"))
+			put([]byte("2"), []byte("v2"))
+			put([]byte("3"), []byte("v3"))
+			put([]byte("4"), []byte("v4"))
+			put([]byte("5"), []byte("v5"))
 			return err
 		})
 		if err != nil {
@@ -937,13 +937,13 @@ func TestConcurrentReadingAndWriting(t *testing.T) {
 			var err error
 			if i == 0 {
 				// must give it enough space to write in for the key!
-				k, v, err = cur.Get([]byte("hello"), nil, SetRange)
+				k, v, err = cur.Get([]byte("0"), nil, SetRange)
 				panicOn(err)
 			} else {
 				k, v, err = cur.Get([]byte("hello"), nil, Next)
 				if IsNotFound(err) {
 					vv("not found")
-					k, v, err = cur.Get(nil, nil, SetRange)
+					k, v, err = cur.Get([]byte("0"), nil, SetRange)
 					panicOn(err)
 				} else {
 					panicOn(err)
