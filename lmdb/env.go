@@ -108,7 +108,7 @@ func (env *Env) GetOrWaitForReadSlot(rs *ReadSlot) {
 	rs.sval = env.rval[i]
 	rs.slot = i
 	env.rkeyMu.Unlock()
-	vv("get read slot allocated rs.slot = %v", rs.slot)
+	//vv("get read slot allocated rs.slot = %v", rs.slot)
 	return
 }
 
@@ -118,7 +118,7 @@ func (env *Env) GetOrWaitForReadSlot(rs *ReadSlot) {
 // of readers whose size is defined by the NewEnv
 // maxReaders parameter.
 func (env *Env) ReturnReadSlot(rs *ReadSlot) {
-	vv("return read slot rs.slot = %v", rs.slot)
+	//vv("return read slot rs.slot = %v", rs.slot)
 	env.rkeyMu.Lock()
 	env.rkeyAvail = append(env.rkeyAvail, rs.slot)
 	env.rkeyMu.Unlock()
@@ -133,7 +133,6 @@ func (env *Env) ReturnReadSlot(rs *ReadSlot) {
 //
 // See mdb_env_create.
 func NewEnv() (*Env, error) {
-	vv("NewEnv called")
 	return NewEnvMaxReaders(256)
 }
 
