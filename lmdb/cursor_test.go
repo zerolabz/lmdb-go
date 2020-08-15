@@ -1239,6 +1239,52 @@ func TestSphynx(t *testing.T) {
 		} // endless for
 	}
 	go writer()
+	/*
+			writer := func() {
+				// updates and deletes
 
+				// env is provided if we need to make new Transactions
+				// any new goroutines are NOT allowed to touch
+				// txn, env, or any cursors produced from them.
+				prefixToLock := []byte{0}
+				err := env.SphynxWriter(prefixToLock, func(txn *Txn, env *Env) (err error) {
+				for {
+					for i := 0; i < 3e5; i++ {
+
+						kx := rand.Intn(10)
+						k := []byte(fmt.Sprintf("writers_k%v", kx))
+						v := []byte(fmt.Sprintf("writers_v%v", kx))
+
+						// 90/10 put or delete
+						rnd := rand.Intn(10)
+						switch rnd {
+						default:
+							err := txn.Put(dbi, k, v, 0)
+							panicOn(err)
+						case 1: // 10% of the time, delete
+							err := txn.Del(dbi, k, nil)
+							if IsNotFound(err) {
+								// ok, ignore. will be frequent.
+							} else {
+								panicOn(err)
+								if i%1e4 == 0 {
+									vv("writer deleted k '%v' ok", string(k))
+								}
+							}
+						}
+
+						if i%1e5 == 0 {
+							vv("writer at i=%v  sees key:'%v' -> val:'%v'", i, string(k), string(v))
+						}
+					}
+					panicOn(txn.Commit())
+
+					pause := rand.Intn(500)
+					time.Sleep(time.Millisecond * time.Duration(pause))
+				} // endless for
+				//})
+			}
+		go writer()
+	*/
 	select {}
 }

@@ -61,7 +61,7 @@ type Txn struct {
 	env  *Env
 	_txn *C.MDB_txn
 
-	// ReadSlot has skey and sval
+	// ReadSlot has skey and sval; only used for Readonly txn.
 	ReadSlot
 
 	errLogf func(format string, v ...interface{})
