@@ -81,28 +81,31 @@ func beginTxnWithReadSlot(env *Env, parent *Txn, flags uint, rs *ReadSlot) (*Txn
 	}
 
 	var ptxn *C.MDB_txn
-	if parent == nil {
-		if flags&Readonly == 0 {
-			// In a write Txn we can use the shared, C-allocated key and value
-			// allocated by env, and freed when it is closed.
-			txn.skey = env.wkey
-			txn.sval = env.wval
-		} else {
-			if rs != nil {
-				txn.ReadSlot = *rs
+	if rs == nil {
+		if parent == nil {
+			if flags&Readonly == 0 {
+				// In a write Txn we can use the shared, C-allocated key and value
+				// allocated by env, and freed when it is closed.
+				txn.skey = env.wkey
+				txn.sval = env.wval
 			} else {
 				err := env.GetOrWaitForReadSlot(&txn.ReadSlot)
 				if err != nil {
 					return nil, err
 				}
 			}
+		} else {
+			// Because parent Txn objects cannot be used while a sub-Txn is active
+			// it is OK for them to share their C.MDB_val objects.
+			ptxn = parent._txn
+			txn.skey = parent.skey
+			txn.sval = parent.sval
 		}
 	} else {
-		// Because parent Txn objects cannot be used while a sub-Txn is active
-		// it is OK for them to share their C.MDB_val objects.
-		ptxn = parent._txn
-		txn.skey = parent.skey
-		txn.sval = parent.sval
+		txn.ReadSlot = *rs
+		if parent != nil {
+			ptxn = parent._txn
+		}
 	}
 	ret := C.mdb_txn_begin(env._env, ptxn, C.uint(flags), &txn._txn)
 	if ret != success {
@@ -238,6 +241,7 @@ func (txn *Txn) clearTxn() {
 	txn._txn = nil
 
 	if txn.readonly {
+		vv("clearTx is returning read slot %v", txn.ReadSlot.slot)
 		txn.env.ReturnReadSlot(&txn.ReadSlot)
 	}
 

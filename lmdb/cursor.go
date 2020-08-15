@@ -171,7 +171,7 @@ func (c *Cursor) Get(setkey, setval []byte, op uint) (key, val []byte, err error
 		}
 	} else {
 		if c.txn.skey == nil {
-			panic("huh? why is c.txn.key nil?")
+			panic("huh? why is c.txn.skey nil?")
 		}
 		key = c.txn.bytes(c.txn.skey)
 	}

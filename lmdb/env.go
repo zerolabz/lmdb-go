@@ -718,6 +718,8 @@ func newSphynxReadWorker() *sphynxReadWorker {
 					defer runtime.UnlockOSThread()
 					defer close(job.done)
 
+					vv("about beginTxn with slot %v from job", job.readSlot.slot)
+					defer vv("done with slot %v from job", job.readSlot.slot)
 					txn, err := beginTxnWithReadSlot(job.env, nil, job.flags, &job.readSlot)
 					panicOn(err)
 

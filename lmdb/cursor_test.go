@@ -1242,3 +1242,182 @@ func TestSphynx(t *testing.T) {
 
 	select {}
 }
+
+// totally separate Env for each file, does it work?
+func TestTwoDatabaseFilesOpenAtOnce(t *testing.T) {
+
+	openDB := func(path string) (*Env, error) {
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
+
+		rand.Seed(1)
+		maxr := 7
+		env, err := NewEnvMaxReaders(maxr)
+		if err != nil {
+			t.Fatalf("env: %s", err)
+		}
+
+		//err = os.MkdirAll(path, 0770)
+
+		err = env.SetMaxDBs(64 << 10)
+		panicOn(err)
+
+		var myflags uint = NoReadahead | NoSubdir
+		err = env.Open(path, myflags, 0664)
+		panicOn(err)
+
+		// cleanup
+		defer func() {
+			path, err := env.Path()
+			panicOn(err)
+			err = env.Close()
+			panicOn(err)
+
+			if path != "" {
+				err = os.RemoveAll(path)
+				panicOn(err)
+			}
+		}()
+
+		var dbi DBI
+		err = env.Update(func(txn *Txn) (err error) {
+			dbi, err = txn.OpenDBI("testdb", Create)
+			return err
+		})
+		panicOn(err)
+
+		err = env.Update(func(txn *Txn) (err error) {
+			put := func(k, v []byte) {
+				if err == nil {
+					err = txn.Put(dbi, k, v, 0)
+				}
+			}
+			put([]byte{0}, []byte("v0"))
+			put([]byte("1big_huge_ginormous_key"), []byte("v1"))
+			put([]byte("2"), []byte("v2"))
+			put([]byte("3"), []byte("v3"))
+			put([]byte("4"), []byte("v4"))
+			put([]byte("5"), []byte("v5"))
+			return err
+		})
+		if err != nil {
+			t.Errorf("%s", err)
+		}
+
+		reader := func() {
+			for {
+				err := env.SphynxReader(func(txn *Txn, readslot int) (err error) {
+					panicOn(err)
+					vv("new Sphynx has readslot %v has made a new txn", readslot)
+
+					cur, err := txn.OpenCursor(dbi)
+					panicOn(err)
+
+					for i := 0; i < 3e5; i++ {
+						var k, v []byte
+						var err error
+						if i == 0 {
+							// must give it at least a zero byte here to start.
+							k, v, err = cur.Get([]byte{0}, nil, SetRange)
+							panicOn(err)
+						} else {
+							k, v, err = cur.Get([]byte("hello"), nil, Next)
+							if IsNotFound(err) {
+								//vv("not found")
+								// start over
+								k, v, err = cur.Get([]byte{0}, nil, SetRange)
+								panicOn(err)
+							} else {
+								panicOn(err)
+							}
+						}
+						_, _ = k, v
+						if i%1e4 == 0 {
+							vv("reader %v at i=%v  sees key:'%v' -> val:'%v'", readslot, i, string(k), string(v))
+						}
+					}
+					cur.Close()
+					return nil
+				})
+				vv("SphynxReader returned err='%v'", err)
+				pause := rand.Intn(500)
+				time.Sleep(time.Millisecond * time.Duration(pause))
+
+			} // endless for
+		} // defn reader
+
+		// start a bunch of readers, staggered
+		for k := 0; k < 11; k++ {
+			pause := rand.Intn(121)
+			time.Sleep(time.Millisecond * time.Duration(pause))
+			go reader()
+		}
+
+		writer := func() {
+			// add one and delete one
+			runtime.LockOSThread()
+			defer runtime.UnlockOSThread()
+
+			for {
+				txn, err := env.NewWriteTxn()
+				panicOn(err)
+				vv("writer has made a new txn")
+
+				for i := 0; i < 3e5; i++ {
+
+					kx := rand.Intn(10)
+					k := []byte(fmt.Sprintf("writers_k%v", kx))
+					v := []byte(fmt.Sprintf("writers_v%v", kx))
+
+					// 90/10 put or delete
+					rnd := rand.Intn(10)
+					switch rnd {
+					default:
+						err := txn.Put(dbi, k, v, 0)
+						panicOn(err)
+					case 1: // 10% of the time, delete
+						err := txn.Del(dbi, k, nil)
+						if IsNotFound(err) {
+							// ok, ignore. will be frequent.
+						} else {
+							panicOn(err)
+							if i%1e4 == 0 {
+								vv("writer deleted k '%v' ok", string(k))
+							}
+						}
+					}
+
+					if i%1e5 == 0 {
+						vv("writer at i=%v  sees key:'%v' -> val:'%v'", i, string(k), string(v))
+					}
+				}
+				panicOn(txn.Commit())
+
+				pause := rand.Intn(500)
+				time.Sleep(time.Millisecond * time.Duration(pause))
+			} // endless for
+		}
+		go writer()
+
+		return env, nil
+	}
+	_ = openDB
+
+	fdA, err := ioutil.TempFile("", "dbA-concur-lmdb")
+	panicOn(err)
+	pathA := fdA.Name()
+	fdA.Close()
+	vv("temp file A:  %v", pathA)
+
+	fdB, err := ioutil.TempFile("", "dbB-concur-lmdb")
+	panicOn(err)
+	pathB := fdB.Name()
+	fdB.Close()
+	vv("temp file B:  %v", pathB)
+
+	envA, err := openDB(pathA)
+	panicOn(err)
+	_ = envA
+
+	select {}
+}
