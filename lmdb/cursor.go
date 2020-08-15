@@ -145,6 +145,7 @@ func (c *Cursor) DBI() DBI {
 // See mdb_cursor_get.
 func (c *Cursor) Get(setkey, setval []byte, op uint) (key, val []byte, err error) {
 	vv("Cursor.Get called with slot %v", c.txn.readSlot.slot)
+	c.txn.readSlot.confirmOwned()
 	switch {
 	case len(setkey) == 0:
 		err = c.getVal0(op)

@@ -10,6 +10,7 @@ import "C"
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"runtime"
 	"sync"
@@ -95,11 +96,12 @@ type Env struct {
 }
 
 type ReadSlot struct {
-	slot     int
+	slot     int // immutable once created
 	skey     *C.MDB_val
 	sval     *C.MDB_val
-	mu       sync.Mutex // only one user at a time, and protect refCount
+	mu       sync.Mutex // only one user at a time, and protect refCount/owner
 	refCount int
+	owner    int
 }
 
 func newReadSlot(i int) *ReadSlot {
@@ -110,8 +112,12 @@ func newReadSlot(i int) *ReadSlot {
 	}
 }
 func (rs *ReadSlot) free() {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	rs.refCount = -1
+	rs.owner = 0 // not owned
 	C.free(unsafe.Pointer(rs.skey))
-	rs.skey = nil // write race here
+	rs.skey = nil
 	C.free(unsafe.Pointer(rs.sval))
 	rs.sval = nil
 }
@@ -133,11 +139,24 @@ func (env *Env) GetOrWaitForReadSlot() (rs *ReadSlot, err error) {
 	i := env.rkeyAvail[0]
 	env.rkeyAvail = env.rkeyAvail[1:]
 	rs = env.readSlots[i]
+	rs.mu.Lock()
+	if rs.owner != 0 {
+		vv("rs %p is still owned by gid %v", rs, rs.owner)
+		panic(fmt.Sprintf("rs %p is still owned by gid %v", rs, rs.owner))
+	}
 	rs.refCount = 1
-	//	rs.skey = env.rkey[i]
-	//	rs.sval = env.rval[i]
-	//	rs.slot = i
+	rs.owner = curGID()
+	rs.mu.Unlock()
 	return
+}
+
+func (rs *ReadSlot) confirmOwned() {
+	gid := curGID()
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	if rs.owner != gid {
+		panic(fmt.Sprintf("we(gid=%v) are not the owner of this ReadSlot p=%p, gid is: %v", gid, rs, rs.owner))
+	}
 }
 
 // ReturnReadSlot must be called after the reader is
@@ -151,6 +170,7 @@ func (env *Env) ReturnReadSlot(rs *ReadSlot) {
 
 	rs.refCount--
 	if rs.refCount == 0 {
+		rs.owner = 0 // not owned
 		env.rkeyAvail = append(env.rkeyAvail, rs.slot)
 		//vv("returned slot i = %v", rs.slot)
 
