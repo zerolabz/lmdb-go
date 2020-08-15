@@ -1073,8 +1073,8 @@ func TestConcurrentReadingAndWriting(t *testing.T) {
 
 // when you make a new txn, you automatically
 // get a good goroutine to run it on.
-// lion(txn) + eagle(goroutin) = sphynx
-// the riddle is, will it work?
+// lion(txn) + eagle(goroutine) = sphynx
+// the riddle is still a mystery.
 func TestSphinx(t *testing.T) {
 
 	rand.Seed(1)

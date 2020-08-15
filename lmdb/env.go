@@ -665,8 +665,20 @@ func (env *Env) newSphynxReadJob(f SphynxReadFunc) (j *sphynxReadJob) {
 	return
 }
 
-func (env *Env) SphynxReader(sphynxRF SphynxReadFunc) (err error) {
-	job := env.newSphynxReadJob(sphynxRF)
+// SphynxReader runs srf on a background goroutine
+// that has been tied to an OS thread as LMDB needs,
+// and has obtained a transaction on that thread.
+// This last is also an LMDB requirement. Transactions
+// cannot be used on different threads than they
+// were created on. Env creates these threads and
+// binds goroutines to them at NewEnv creation time,
+// based on the count of maxReaders.
+//
+// The Lion(txn) + Eagle(goroutine) = Sphynx, a hybrid creature.
+//
+// The riddle is still a mystery.
+func (env *Env) SphynxReader(srf SphynxReadFunc) (err error) {
+	job := env.newSphynxReadJob(srf)
 
 	// block until we can get a read slot
 	err = env.GetOrWaitForReadSlot(&job.readSlot)
