@@ -131,6 +131,8 @@ func (c *Cursor) DBI() DBI {
 	return DBI(C.mdb_cursor_dbi(c._c))
 }
 
+var zerobyte = []byte{0}
+
 // Get retrieves items from the database. If c.Txn().RawRead is true the slices
 // returned by Get reference readonly sections of memory that must not be
 // accessed after the transaction has terminated.
@@ -147,6 +149,14 @@ func (c *Cursor) Get(setkey, setval []byte, op uint) (key, val []byte, err error
 	c.txn.readSlot.mu.Lock()
 	//vv("Cursor.Get called by gid=%v with slot %v", curGID(), c.txn.readSlot.slot)
 	defer c.txn.readSlot.mu.Unlock()
+
+	if len(setkey) == 0 {
+		switch op {
+		case SetRange:
+			// won't work to SetRange on nil key; the smallest possible key is 0, the zerobyte.
+			setkey = zerobyte
+		}
+	}
 
 	switch {
 	case len(setkey) == 0:
