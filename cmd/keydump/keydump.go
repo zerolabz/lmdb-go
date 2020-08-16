@@ -125,7 +125,7 @@ database '%v':
 					vs = fmt.Sprintf("%x", v) + " "
 				}
 				//fmt.Printf("[%04v] key '%v' (len %v)  -> val %v(len %v)\n", i, fmt.Sprintf("%x", k), len(k), vs, len(v))
-				fmt.Printf("[%04v] key '%x' '%v' (len %v)  -> val %v(len %v)\n", i, k, string(k), len(k), vs, len(v))
+				fmt.Printf("[%04v] key '%v' (len %v)  -> val %v(len %v)\n", i, string(k), len(k), vs, len(v))
 			}
 			return
 		})
