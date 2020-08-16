@@ -224,6 +224,9 @@ func NewEnvMaxReaders(maxReaders int) (*Env, error) {
 		return nil, operrno("mdb_env_create", ret)
 	}
 
+	err := env.SetMaxReaders(maxReaders)
+	panicOn(err)
+
 	runtime.SetFinalizer(env, (*Env).Close)
 	return env, nil
 }
