@@ -155,10 +155,23 @@ mdb.c:7380:5: warning: writing 8 bytes into a region of size 1 [-Wstringop-overf
 
 (b) darwin "gcc" which is really clang 9.1.0:
 warning: unknown warning option '-Wno-stringop-overflow'; did you mean '-Wno-shift-overflow'? [-Wunknown-warning-option]
+
+(c) with release_0.9.24_lmdb_2019july19 version of LMDB, gcc10.1.0 reports, so add -Wno-implicit-fallthrough
+
+mdb.c: In function ‘mdb_cursor_put’:
+mdb.c:6779:9: warning: this statement may fall through [-Wimplicit-fallthrough=]
+ 6779 |      if (SIZELEFT(fp) < offset) {
+      |         ^
+mdb.c:6784:5: note: here
+ 6784 |     case MDB_CURRENT:
+      |     ^~~~
+mdb.c: At top level:
+
+Ignoring b/c there is an explicit comment in the code at mdb.c:6783 saying it is an intended fallthrough.
 */
 
 /*
-#cgo CFLAGS: -pthread -W -Wall -Wno-unused-parameter -Wno-format-extra-args -Wbad-function-cast -Wno-missing-field-initializers -Wno-stringop-overflow -Wno-unknown-warning-option -O2 -g
+#cgo CFLAGS: -pthread -W -Wall -Wno-unused-parameter -Wno-format-extra-args -Wbad-function-cast -Wno-missing-field-initializers -Wno-stringop-overflow -Wno-implicit-fallthrough -Wno-unknown-warning-option -O2 -g
 #cgo linux,pwritev CFLAGS: -DMDB_USE_PWRITEV
 
 #include "lmdb.h"
