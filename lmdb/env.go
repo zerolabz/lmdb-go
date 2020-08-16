@@ -563,6 +563,9 @@ func (env *Env) SetMaxDBs(size int) error {
 // are terminated explicitly.  Unterminated transactions can adversly effect
 // database performance and cause the database to grow until the map is full.
 //
+// Since BeginTxn will block until a read slot is available, set
+// your maximum readers high enough.
+//
 // See mdb_txn_begin.
 func (env *Env) BeginTxn(parent *Txn, flags uint) (txn *Txn, err error) {
 	txn, err = beginTxn(env, parent, flags)
