@@ -124,8 +124,7 @@ database '%v':
 				if len(v) < 100 {
 					vs = fmt.Sprintf("%x", v) + " "
 				}
-				//fmt.Printf("[%04v] key '%v' (len %v)  -> val %v(len %v)\n", i, fmt.Sprintf("%x", k), len(k), vs, len(v))
-				fmt.Printf("[%04v] key '%v' (len %v)  -> val %v(len %v)\n", i, string(k), len(k), vs, len(v))
+				fmt.Printf("%04v %v len value; key: '%v' len %v -> %v\n", i, len(v), string(k), len(k), vs)
 			}
 			return
 		})
