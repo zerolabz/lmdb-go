@@ -564,12 +564,22 @@ func (env *Env) SetMaxDBs(size int) error {
 // database performance and cause the database to grow until the map is full.
 //
 // See mdb_txn_begin.
-func (env *Env) BeginTxn(parent *Txn, flags uint) (*Txn, error) {
-	txn, err := beginTxn(env, parent, flags)
+func (env *Env) BeginTxn(parent *Txn, flags uint) (txn *Txn, err error) {
+	txn, err = beginTxn(env, parent, flags)
 	if txn != nil {
 		runtime.SetFinalizer(txn, func(v interface{}) { v.(*Txn).finalize() })
 	}
-	return txn, err
+	return
+}
+
+// BlockUntilBeginReadTxn will block until it can get a read slot
+// thus respecting the max readers limit.
+func (env *Env) BlockUntilBeginReadTxn() (txn *Txn, err error) {
+	rs, err := env.GetOrWaitForReadSlot()
+	if err != nil {
+		return nil, err
+	}
+	return env.BeginTxnWithReadSlot(nil, Readonly, rs)
 }
 
 func (env *Env) BeginTxnWithReadSlot(parent *Txn, flags uint, rs *ReadSlot) (*Txn, error) {
