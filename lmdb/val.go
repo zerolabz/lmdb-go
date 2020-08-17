@@ -9,9 +9,15 @@ import "C"
 
 import (
 	"unsafe"
-
-	"github.com/glycerine/lmdb-go/int/lmdbarch"
+	//"github.com/glycerine/lmdb-go/int/lmdbarch"
 )
+
+// Width64 is 1 for 64-bit architectures and 0 otherwise.
+// It is relocated from Package lmdbarch. The
+// primary reason the package exists is because the constant definitions are
+// scary and some will not pass linters.
+// from package lmdbarch:
+const Width64 = 1 // only support 64-bit arch anyway.
 
 // valSizeBits is the number of bits which constraining the length of the
 // single values in an LMDB database, either 32 or 31 depending on the
@@ -25,7 +31,8 @@ import (
 // On 64-bit systems, luckily, the value 2^32-1 coincides with the maximum data
 // size for LMDB (MAXDATASIZE).
 const (
-	valSizeBits = lmdbarch.Width64*32 + (1-lmdbarch.Width64)*31
+	//valSizeBits = lmdbarch.Width64*32 + (1-lmdbarch.Width64)*31
+	valSizeBits = Width64*32 + (1-Width64)*31
 	valMaxSize  = 1<<valSizeBits - 1
 )
 
