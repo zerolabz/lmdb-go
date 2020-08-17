@@ -1431,10 +1431,11 @@ func TestTwoDatabaseFilesOpenAtOnce(t *testing.T) {
 				// means that we boneheadedly closed/deleted the files while the write
 				// was in progress, probably due to an errant defer.Close().
 
+				barrier.UnblockReaders()
+
 				pause := rand.Intn(100)
 				time.Sleep(time.Millisecond * time.Duration(pause))
 
-				barrier.UnblockReaders()
 			} // endless for
 		}
 		go writer()
