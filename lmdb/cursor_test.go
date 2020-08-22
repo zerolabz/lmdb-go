@@ -1089,6 +1089,8 @@ func TestSphynx(t *testing.T) {
 	if err != nil {
 		t.Fatalf("env: %s", err)
 	}
+	env.UseSphynxReader()
+
 	path, err := ioutil.TempDir("", "mdb_test")
 	if err != nil {
 		t.Fatalf("tempdir: %v", err)
@@ -1262,6 +1264,7 @@ func TestTwoDatabaseFilesOpenAtOnce(t *testing.T) {
 		maxr := 7
 		env, err := NewEnvMaxReaders(maxr)
 		panicOn(err)
+		env.UseSphynxReader()
 		//defer env.Close()
 
 		env.SetMapSize(1 << 20) // default 1MB is too small, but catches our growth without bounds problem.

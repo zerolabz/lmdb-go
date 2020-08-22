@@ -211,7 +211,6 @@ func NewEnvMaxReaders(maxReaders int) (*Env, error) {
 		writeSlot:  newReadSlot(-1),
 		rkeyAvail:  make([]int, maxReaders, maxReaders),
 		maxReaders: maxReaders,
-		readWorker: newSphynxReadWorker(),
 	}
 	for i := 0; i < maxReaders; i++ {
 		env.readSlots[i] = newReadSlot(i)
@@ -229,6 +228,16 @@ func NewEnvMaxReaders(maxReaders int) (*Env, error) {
 
 	runtime.SetFinalizer(env, (*Env).Close)
 	return env, nil
+}
+
+// UseSphynxReader must be called before env.SphynxReader.
+// We lazily allocate the SphynxReader so it doesn't consume
+// a goroutine when it won't be used.
+func (env *Env) UseSphynxReader() {
+	if env.readWorker == nil {
+		env.readWorker = newSphynxReadWorker()
+	}
+
 }
 
 // Open an environment handle. If this function fails Close() must be called to
@@ -319,8 +328,10 @@ func (env *Env) close() bool {
 
 	env.writeSlot.free()
 
-	env.readWorker.halt.ReqStop.Close()
-	<-env.readWorker.halt.Done.Chan
+	if env.readWorker != nil {
+		env.readWorker.halt.ReqStop.Close()
+		<-env.readWorker.halt.Done.Chan
+	}
 
 	for i := 0; i < env.maxReaders; i++ {
 		env.readSlots[i].free()
@@ -753,6 +764,9 @@ func (env *Env) newSphynxReadJob(f SphynxReadFunc) (j *sphynxReadJob) {
 //
 // The riddle is still a mystery.
 func (env *Env) SphynxReader(srf SphynxReadFunc) (err error) {
+	if env.readWorker == nil {
+		panic("must call env.UseSphynxReader first")
+	}
 	job := env.newSphynxReadJob(srf)
 
 	// block until we can get a read slot
