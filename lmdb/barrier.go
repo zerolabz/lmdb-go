@@ -91,6 +91,7 @@ func NewBarrier() (b *Barrier) {
 				}
 				if n >= th {
 					close(curBlockReq.done)
+					curBlockReq = nil
 				}
 			case ub := <-b.unblockCh:
 				for _, appt := range waitlist {
