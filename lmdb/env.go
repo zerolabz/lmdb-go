@@ -118,13 +118,14 @@ func (rs *ReadSlot) free() {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
 	if rs.owner != 0 {
-		panic(fmt.Sprintf("should not be in ReadSlot.free() with slot still owned by gid=%v", rs.owner))
+		panic(fmt.Sprintf("should not be in ReadSlot.free() with slot still owned by gid=%v; refCount=%v", rs.owner, rs.refCount))
 	}
 	if rs.refCount != 0 {
 		// TestTxn_Sub gets here; in txn_test.go, on the defer Close(). Don't freak out?
 		// Or don't ref-count when a child uses the parent txn. Yep, that's better.
 		panic(fmt.Sprintf("should not be in ReadSlot.free() with slot %v having non-zero refCount = %v", rs.slot, rs.refCount))
 	}
+	rs.owner = 0
 	C.free(unsafe.Pointer(rs.skey))
 	rs.skey = nil
 	C.free(unsafe.Pointer(rs.sval))
