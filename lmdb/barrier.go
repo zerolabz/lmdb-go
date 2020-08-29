@@ -76,7 +76,7 @@ func NewBarrier() (b *Barrier) {
 					panic("had waiters when we were open, internal/client bug")
 				}
 			case appt := <-b.wait:
-				//vv("barrier.wait sees appt = '%#v' and curBlockReq = '%#v'", appt, curBlockReq)
+				//vv("barrier.wait sees appt = '%#v' and  curBlockReq = '%#v'", appt, curBlockReq)
 				if curBlockReq == nil {
 					close(appt.done)
 					continue
