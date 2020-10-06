@@ -1,4 +1,4 @@
-// +build !darwin
+// +build darwin
 
 /*
 Package lmdb provides bindings to the lmdb C API.  The package bindings are
@@ -174,7 +174,7 @@ Ignoring b/c there is an explicit comment in the code at mdb.c:6783 saying it is
 */
 
 /*
-#cgo CFLAGS: -DMDB_USE_SYSV_SEM=1 -pthread -W -Wall -Wno-unused-parameter -Wno-format-extra-args -Wbad-function-cast -Wno-missing-field-initializers -Wno-stringop-overflow -Wno-implicit-fallthrough -Wno-unknown-warning-option -O2 -g
+#cgo CFLAGS: -pthread -W -Wall -Wno-unused-parameter -Wno-format-extra-args -Wbad-function-cast -Wno-missing-field-initializers -Wno-stringop-overflow -Wno-implicit-fallthrough -Wno-unknown-warning-option -O2 -g
 #cgo linux,pwritev CFLAGS: -DMDB_USE_PWRITEV
 
 #include "lmdb.h"
